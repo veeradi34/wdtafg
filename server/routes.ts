@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { generateApp, testGeminiAPI } from "./lib/gemini";
+import { generateApp, testGeminiAPI, analyzeCodeCreativity } from "./lib/gemini";
 import { insertProjectSchema } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
 
@@ -43,8 +43,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         buildTool: buildTool || "Vite",
       };
 
+      // Generate the app
       const generatedApp = await generateApp(appConfig);
-      res.json(generatedApp);
+      
+      try {
+        // Analyze code creativity in the background
+        // Using a short timeout to ensure the main response isn't blocked
+        setTimeout(async () => {
+          try {
+            const creativityMetrics = await analyzeCodeCreativity(generatedApp.files);
+            generatedApp.creativityMetrics = creativityMetrics;
+            
+            // Emit an event or update the app in storage if needed
+            console.log("Code creativity analysis completed:", creativityMetrics.score);
+          } catch (analysisError) {
+            console.error("Error in background creativity analysis:", analysisError);
+          }
+        }, 100);
+        
+        // Respond with the generated app (creativity metrics will be added asynchronously)
+        res.json(generatedApp);
+      } catch (analysisError) {
+        // Even if creativity analysis fails, we still return the generated app
+        console.warn("Error analyzing code creativity:", analysisError);
+        res.json(generatedApp);
+      }
     } catch (error: any) {
       console.error("Error generating app:", error);
       res.status(500).json({ error: error.message || "Unknown error" });

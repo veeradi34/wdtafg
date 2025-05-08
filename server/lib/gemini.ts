@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
-import { FileNode, GeneratedApp } from "@shared/schema";
+import { FileNode, GeneratedApp, CreativityMetrics } from "@shared/schema";
 
 // Initialize Google Generative AI with API key
 const geminiAPI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
@@ -326,6 +326,112 @@ Ensure your JSON is properly formatted and can be parsed by JSON.parse().`;
   } catch (error: any) {
     console.error("Error generating application:", error);
     throw new Error(`Failed to generate application: ${error.message || "Unknown error"}`);
+  }
+}
+
+// Function to analyze code creativity
+export async function analyzeCodeCreativity(files: FileNode[]): Promise<CreativityMetrics> {
+  try {
+    // Get only file content for code analysis (exclude folders)
+    const codeFiles = files.filter(file => file.type === "file" && file.content);
+    
+    if (codeFiles.length === 0) {
+      throw new Error("No code files found for creativity analysis");
+    }
+    
+    // Create a prompt that asks Gemini to evaluate code creativity
+    const prompt = `Analyze the following code for creativity and innovation. 
+    
+CODE FILES FOR ANALYSIS:
+${codeFiles.map(file => `--- ${file.path} ---
+${file.content?.substring(0, 1000)}... (truncated)
+`).join('\n')}
+
+Provide a detailed assessment of the code's creativity based on these criteria:
+1. Novelty: How original and unique are the approaches and patterns used?
+2. Usefulness: How practical and functional is the implementation for solving the intended problem?
+3. Elegance: How well-organized, efficient, and aesthetically pleasing is the code?
+4. Robustness: How well does it handle edge cases and potential issues?
+
+For each criterion, provide a score from 0-100 and a brief explanation.
+
+Your response MUST be valid JSON in this exact format:
+{
+  "score": number,         // Overall creativity score (0-100)
+  "novelty": number,       // Novelty score (0-100)
+  "usefulness": number,    // Usefulness score (0-100)
+  "elegance": number,      // Elegance score (0-100)
+  "robustness": number,    // Robustness score (0-100)
+  "description": "string"  // Brief overall assessment
+}
+
+RESPONSE FORMAT:
+Only respond with valid JSON. Do not include any text before or after the JSON.
+Do not use markdown code blocks, backticks, or other formatting.`;
+
+    const model = geminiAPI.getGenerativeModel({ model: MODEL });
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.2,
+        maxOutputTokens: 1024,
+        topK: 40,
+        topP: 0.8,
+        responseMimeType: "application/json",
+      }
+    });
+
+    const response = result.response;
+    const text = response.text();
+    
+    // Clean up the JSON text using the same approach as in generateApp
+    const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/) || text.match(/```([\s\S]*?)```/) || [null, text];
+    let jsonText = jsonMatch[1] || text;
+    
+    jsonText = jsonText.trim()
+      .replace(/^[\s\S]*?(?=\{)/, '')
+      .replace(/\}[\s\S]*$/, '}')
+      .replace(/'/g, '"')
+      .replace(/,(\s*[\]}])/g, '$1')
+      .replace(/([{,]\s*)(\w+):/g, '$1"$2":');
+    
+    try {
+      const creativityMetrics = JSON.parse(jsonText) as CreativityMetrics;
+      
+      // Ensure all scores are within valid range
+      const validateScore = (score: number) => Math.min(100, Math.max(0, score));
+      
+      return {
+        score: validateScore(creativityMetrics.score),
+        novelty: validateScore(creativityMetrics.novelty),
+        usefulness: validateScore(creativityMetrics.usefulness),
+        elegance: validateScore(creativityMetrics.elegance),
+        robustness: validateScore(creativityMetrics.robustness),
+        description: creativityMetrics.description || "Code creativity analysis completed."
+      };
+    } catch (error) {
+      console.error("Error parsing creativity metrics:", error);
+      // Provide default metrics if parsing fails
+      return {
+        score: 70,
+        novelty: 65,
+        usefulness: 75,
+        elegance: 68,
+        robustness: 72,
+        description: "Unable to analyze code creativity accurately. Using default assessment."
+      };
+    }
+  } catch (error) {
+    console.error("Error analyzing code creativity:", error);
+    // Return default values in case of error
+    return {
+      score: 65,
+      novelty: 60,
+      usefulness: 70,
+      elegance: 65,
+      robustness: 65,
+      description: "Failed to analyze code creativity. Using default assessment."
+    };
   }
 }
 

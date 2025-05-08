@@ -41,22 +41,35 @@ export type InsertProject = z.infer<typeof insertProjectSchema>;
 export type Project = typeof projects.$inferSelect;
 
 // Define the file structure type
-export const fileSchema = z.object({
+export const fileSchema: z.ZodType<any> = z.object({
   name: z.string(),
   path: z.string(),
-  content: z.string(),
-  language: z.string(),
+  content: z.string().optional(),
+  language: z.string().optional(),
   type: z.enum(["file", "folder"]),
   children: z.lazy(() => z.array(fileSchema)).optional(),
 });
 
 export type FileNode = z.infer<typeof fileSchema>;
 
+// Creativity metrics schema
+export const creativityMetricsSchema = z.object({
+  score: z.number().min(0).max(100),
+  novelty: z.number().min(0).max(100),
+  usefulness: z.number().min(0).max(100),
+  elegance: z.number().min(0).max(100),
+  robustness: z.number().min(0).max(100),
+  description: z.string(),
+});
+
+export type CreativityMetrics = z.infer<typeof creativityMetricsSchema>;
+
 // Generated app type
 export const generatedAppSchema = z.object({
   files: z.array(fileSchema),
   dependencies: z.record(z.string(), z.string()),
   devDependencies: z.record(z.string(), z.string()),
+  creativityMetrics: creativityMetricsSchema.optional(),
 });
 
 export type GeneratedApp = z.infer<typeof generatedAppSchema>;
