@@ -105,8 +105,8 @@ export default function LivePreview({
     return searchFiles(files);
   };
 
-  // Helper function to render a calculator preview with functionality
-  const renderCalculatorPreview = () => {
+  // Create a separate calculator component to properly handle React hooks
+  const Calculator = () => {
     const [display, setDisplay] = useState<string>("0");
     const [operation, setOperation] = useState<string | null>(null);
     const [previousValue, setPreviousValue] = useState<number | null>(null);
@@ -323,19 +323,43 @@ export default function LivePreview({
       
       // Show calculator-specific preview if it's a calculator app
       if (isCalculator) {
-        return renderCalculatorPreview();
+        return <Calculator />;
       }
       
       // Show the iframe with the generated content
+      if (previewHtml) {
+        return (
+          <div className="h-full w-full">
+            <iframe
+              ref={iframeRef}
+              title="Live Preview"
+              sandbox="allow-scripts"
+              className="h-full w-full border-0"
+              srcDoc={previewHtml}
+            />
+          </div>
+        );
+      }
+      
+      // Fallback if we can't generate preview HTML
       return (
-        <div className="h-full w-full">
-          <iframe
-            ref={iframeRef}
-            title="Live Preview"
-            sandbox="allow-scripts"
-            className="h-full w-full border-0"
-            srcDoc={previewHtml}
-          />
+        <div className="h-full flex flex-col items-center justify-center p-8">
+          <div className="mb-4 text-gray-500 dark:text-gray-400">
+            <div className="h-16 w-16 mx-auto">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-full h-full">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                <polyline points="15 3 21 3 21 9" />
+                <line x1="10" y1="14" x2="21" y2="3" />
+              </svg>
+            </div>
+          </div>
+          <h2 className="text-lg font-medium mb-2">App Generated</h2>
+          <p className="text-gray-500 dark:text-gray-400 text-center mb-4">
+            Your app has been generated successfully! The code is available in the Editor tab.
+          </p>
+          <p className="text-gray-500 dark:text-gray-400 text-center text-sm mb-6">
+            Preview may not be available for this type of application.
+          </p>
         </div>
       );
     }
