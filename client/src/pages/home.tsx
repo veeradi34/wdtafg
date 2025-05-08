@@ -196,7 +196,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   // Function to load a demo app for preview
   const handleLoadErrorTest = () => {
     // Create a simple self-contained demo - using a minimal, single-file HTML app
-    const demoApp = {
+    const demoApp: GeneratedApp = {
       files: [
         {
           name: "index.html",
@@ -274,6 +274,15 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       devDependencies: {
         "vite": "^4.3.0",
         "@vitejs/plugin-react": "^3.1.0"
+      },
+      // Add creativity metrics for the demo app
+      creativityMetrics: {
+        score: 87,
+        novelty: 82, 
+        usefulness: 92,
+        elegance: 85,
+        robustness: 88,
+        description: "This Todo app demonstrates a clean and effective implementation with good structure and practical functionality."
       }
     };
     
@@ -287,7 +296,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     // Show success toast
     toast({
       title: "Demo App Loaded",
-      description: "A working Todo app has been loaded for demonstration. Check the preview tab to see it in action.",
+      description: "A working Todo app has been loaded for preview. Check out the creativity metrics!",
     });
   };
 

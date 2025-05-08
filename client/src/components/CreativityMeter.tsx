@@ -1,9 +1,9 @@
 import React from 'react';
-import { Sparkles, Zap, Scale, CheckSquare } from 'lucide-react';
+import { Sparkles, Zap, Scale, Shield, Trophy } from 'lucide-react';
 import { CreativityMetrics } from '@shared/schema';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface CreativityMeterProps {
@@ -47,8 +47,8 @@ export default function CreativityMeter({ metrics, isLoading = false, className 
   const getScoreColor = (score: number) => {
     if (score >= 90) return "text-purple-500 dark:text-purple-400";
     if (score >= 75) return "text-blue-500 dark:text-blue-400";
-    if (score >= 50) return "text-emerald-500 dark:text-emerald-400";
-    if (score >= 25) return "text-yellow-500 dark:text-yellow-400";
+    if (score >= 60) return "text-emerald-500 dark:text-emerald-400";
+    if (score >= 40) return "text-yellow-500 dark:text-yellow-400";
     return "text-red-500 dark:text-red-400";
   };
 
@@ -56,9 +56,20 @@ export default function CreativityMeter({ metrics, isLoading = false, className 
   const getProgressColor = (score: number) => {
     if (score >= 90) return "bg-purple-500";
     if (score >= 75) return "bg-blue-500";
-    if (score >= 50) return "bg-emerald-500"; 
-    if (score >= 25) return "bg-yellow-500";
+    if (score >= 60) return "bg-emerald-500"; 
+    if (score >= 40) return "bg-yellow-500";
     return "bg-red-500";
+  };
+
+  // Helper to get the innovation level text
+  const getInnovationLevel = (score: number) => {
+    if (score >= 90) return "Groundbreaking";
+    if (score >= 80) return "Innovative";
+    if (score >= 70) return "Advanced";
+    if (score >= 60) return "Creative";
+    if (score >= 50) return "Solid";
+    if (score >= 40) return "Standard";
+    return "Basic";
   };
 
   // Define tooltips for each metric
@@ -70,7 +81,7 @@ export default function CreativityMeter({ metrics, isLoading = false, className 
   };
 
   return (
-    <Card className={cn("w-full shadow-md border-t-4", getProgressColor(metrics.score).replace('bg-', 'border-'), className)}>
+    <Card className={cn("w-full shadow-md", className)}>
       <CardHeader className="pb-2">
         <div className="flex justify-between items-center">
           <CardTitle className="text-lg font-bold flex items-center gap-2">
@@ -81,17 +92,32 @@ export default function CreativityMeter({ metrics, isLoading = false, className 
             className={cn(
               "text-xs font-bold px-2 py-1 rounded-full",
               metrics.score >= 75 ? "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300" :
-              metrics.score >= 50 ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300" :
+              metrics.score >= 60 ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300" :
               "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
             )}
           >
-            {metrics.score}/100
+            {getInnovationLevel(metrics.score)}
           </span>
         </div>
         <CardDescription className="text-xs mt-1">{metrics.description}</CardDescription>
       </CardHeader>
-      <CardContent className="pb-3">
-        <div className="space-y-5 pb-2">
+      <CardContent className="py-3">
+        {/* Overall creativity score */}
+        <div className="mb-4">
+          <div className="flex justify-between items-center mb-1">
+            <span className="text-sm font-medium">Overall Score</span>
+            <span className={cn("text-sm font-bold", getScoreColor(metrics.score))}>
+              {metrics.score}/100
+            </span>
+          </div>
+          <Progress 
+            value={metrics.score} 
+            className={cn("h-2.5", getProgressColor(metrics.score))} 
+          />
+        </div>
+
+        {/* Individual metrics */}
+        <div className="space-y-3">
           <TooltipProvider>
             <div className="space-y-1">
               <div className="flex justify-between items-center">
@@ -107,7 +133,7 @@ export default function CreativityMeter({ metrics, isLoading = false, className 
                 </Tooltip>
                 <span className={cn("text-xs font-medium", getScoreColor(metrics.novelty))}>{metrics.novelty}%</span>
               </div>
-              <Progress value={metrics.novelty} className={cn("h-2", getProgressColor(metrics.novelty))} />
+              <Progress value={metrics.novelty} className={cn("h-1.5", getProgressColor(metrics.novelty))} />
             </div>
 
             <div className="space-y-1">
@@ -115,7 +141,7 @@ export default function CreativityMeter({ metrics, isLoading = false, className 
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span className="text-sm font-medium flex items-center gap-1 cursor-help">
-                      <CheckSquare className="h-3.5 w-3.5" /> Usefulness
+                      <Trophy className="h-3.5 w-3.5" /> Usefulness
                     </span>
                   </TooltipTrigger>
                   <TooltipContent side="right">
@@ -124,7 +150,7 @@ export default function CreativityMeter({ metrics, isLoading = false, className 
                 </Tooltip>
                 <span className={cn("text-xs font-medium", getScoreColor(metrics.usefulness))}>{metrics.usefulness}%</span>
               </div>
-              <Progress value={metrics.usefulness} className={cn("h-2", getProgressColor(metrics.usefulness))} />
+              <Progress value={metrics.usefulness} className={cn("h-1.5", getProgressColor(metrics.usefulness))} />
             </div>
 
             <div className="space-y-1">
@@ -141,7 +167,7 @@ export default function CreativityMeter({ metrics, isLoading = false, className 
                 </Tooltip>
                 <span className={cn("text-xs font-medium", getScoreColor(metrics.elegance))}>{metrics.elegance}%</span>
               </div>
-              <Progress value={metrics.elegance} className={cn("h-2", getProgressColor(metrics.elegance))} />
+              <Progress value={metrics.elegance} className={cn("h-1.5", getProgressColor(metrics.elegance))} />
             </div>
 
             <div className="space-y-1">
@@ -149,7 +175,7 @@ export default function CreativityMeter({ metrics, isLoading = false, className 
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span className="text-sm font-medium flex items-center gap-1 cursor-help">
-                      <CheckSquare className="h-3.5 w-3.5" /> Robustness
+                      <Shield className="h-3.5 w-3.5" /> Robustness
                     </span>
                   </TooltipTrigger>
                   <TooltipContent side="right">
@@ -158,7 +184,7 @@ export default function CreativityMeter({ metrics, isLoading = false, className 
                 </Tooltip>
                 <span className={cn("text-xs font-medium", getScoreColor(metrics.robustness))}>{metrics.robustness}%</span>
               </div>
-              <Progress value={metrics.robustness} className={cn("h-2", getProgressColor(metrics.robustness))} />
+              <Progress value={metrics.robustness} className={cn("h-1.5", getProgressColor(metrics.robustness))} />
             </div>
           </TooltipProvider>
         </div>
