@@ -63,13 +63,31 @@ export function useAppGeneration(options?: UseAppGenerationOptions) {
     setError(null);
     setGeneratedApp(null);
   };
+  
+  // Special function to handle demo app loading (skips API call)
+  const loadDemoApp = (demoApp: GeneratedApp) => {
+    setIsGenerating(true);
+    setError(null);
+    
+    // Simulate API call with a short delay
+    setTimeout(() => {
+      setGeneratedApp(demoApp);
+      setIsComplete(true);
+      setIsGenerating(false);
+      
+      if (options?.onSuccess) {
+        options.onSuccess(demoApp);
+      }
+    }, 500);
+  };
 
   return {
     generateApp,
     reset,
+    loadDemoApp,
     isGenerating,
     isComplete,
-    setIsComplete,  // Export the setter
+    setIsComplete, // Export the setter
     error,
     generatedApp
   };

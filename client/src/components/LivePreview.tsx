@@ -61,13 +61,20 @@ export default function LivePreview({
     };
   }, []);
 
-  // Update preview HTML when files change
+  // Update preview HTML when files change - modified to work with just index.html files
   useEffect(() => {
     console.log("LivePreview effect triggered", { isComplete, filesCount: generatedFiles.length });
     
-    if (isComplete && generatedFiles.length > 0) {
-      renderPreview(generatedFiles);
-      setPreviewErrors([]);
+    if (generatedFiles.length > 0) {
+      // Even if not explicitly marked complete, check if we have an index.html
+      const hasIndexHtml = generatedFiles.some(file => file.name === "index.html" && file.content);
+      
+      // If explicitly marked as complete or we have an index.html, proceed
+      if (isComplete || hasIndexHtml) {
+        console.log("Generating preview for", generatedFiles.map(f => f.name));
+        renderPreview(generatedFiles);
+        setPreviewErrors([]);
+      }
     }
   }, [isComplete, generatedFiles]);
 

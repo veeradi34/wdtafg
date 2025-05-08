@@ -192,8 +192,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   
   // Function to load a demo app for preview
   const handleLoadErrorTest = () => {
-    // Create a simple self-contained demo
-    const mockSuccessResponse = {
+    // Create a simple self-contained demo - using a minimal, single-file HTML app
+    const demoApp = {
       files: [
         {
           name: "index.html",
@@ -207,182 +207,57 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Todo Demo App</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      background-color: #f5f5f5;
-      margin: 0;
-      padding: 20px;
-    }
-    
-    .todo-app {
-      max-width: 500px;
-      margin: 0 auto;
-      background-color: white;
-      border-radius: 8px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-      padding: 20px;
-    }
-    
-    h1 {
-      text-align: center;
-      color: #333;
-      margin-bottom: 20px;
-    }
-    
-    form {
-      display: flex;
-      margin-bottom: 20px;
-    }
-    
-    input {
-      flex: 1;
-      padding: 10px;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      font-size: 16px;
-    }
-    
-    button {
-      background-color: #4CAF50;
-      color: white;
-      border: none;
-      padding: 10px 15px;
-      margin-left: 10px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 16px;
-    }
-    
-    .todos-list {
-      list-style-type: none;
-      padding: 0;
-    }
-    
-    .todo-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 10px;
-      margin-bottom: 10px;
-      background-color: #f9f9f9;
-      border-radius: 4px;
-      border-left: 3px solid #4CAF50;
-    }
-    
-    .todo-item.completed span {
-      text-decoration: line-through;
-      color: #888;
-    }
+    body { font-family: Arial; padding: 20px; background: #f5f5f5; }
+    .container { max-width: 500px; margin: 0 auto; background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    h1 { text-align: center; color: #333; }
+    form { display: flex; margin-bottom: 20px; }
+    input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px; }
+    button { background: #4CAF50; color: white; border: none; padding: 10px 15px; margin-left: 10px; border-radius: 4px; cursor: pointer; }
+    ul { list-style-type: none; padding: 0; }
+    li { display: flex; justify-content: space-between; align-items: center; padding: 10px; margin-bottom: 8px; background: #f9f9f9; border-radius: 4px; }
+    .completed span { text-decoration: line-through; color: #888; }
   </style>
 </head>
 <body>
-  <div id="root">
-    <div class="todo-app">
-      <h1>Todo Demo App</h1>
-      <form id="todo-form">
-        <input type="text" id="todo-input" placeholder="Add a new todo...">
-        <button type="submit">Add</button>
-      </form>
-      <ul id="todos-list" class="todos-list">
-        <li class="todo-item">
-          <span>Click the "Add" button to create a new task</span>
-          <div>
-            <button class="toggle-btn">Complete</button>
-            <button class="delete-btn">Delete</button>
-          </div>
-        </li>
-      </ul>
-    </div>
+  <div class="container">
+    <h1>Todo App</h1>
+    <form id="todo-form">
+      <input type="text" id="todo-input" placeholder="Add a new todo...">
+      <button type="submit">Add</button>
+    </form>
+    <ul id="todo-list">
+      <li>
+        <span>Click the "Add" button to create a new task</span>
+        <div>
+          <button onclick="alert('Task completed!')">Complete</button>
+          <button onclick="alert('Task deleted!')">Delete</button>
+        </div>
+      </li>
+    </ul>
   </div>
 
   <script>
-    // Simple Todo App
-    document.addEventListener('DOMContentLoaded', function() {
-      // Get DOM elements
-      const form = document.getElementById('todo-form');
+    // Very simple non-reactive todo app
+    document.getElementById('todo-form').addEventListener('submit', function(e) {
+      e.preventDefault();
       const input = document.getElementById('todo-input');
-      const todosList = document.getElementById('todos-list');
+      const text = input.value.trim();
       
-      // Initial todos
-      let todos = [
-        { id: 1, text: "Click the \\"Add\\" button to create a new task", completed: false }
-      ];
-      
-      // Add event listeners
-      form.addEventListener('submit', function(e) {
-        e.preventDefault();
-        addTodo(input.value);
+      if (text) {
+        const list = document.getElementById('todo-list');
+        const item = document.createElement('li');
+        
+        item.innerHTML = \`
+          <span>\${text}</span>
+          <div>
+            <button onclick="this.parentNode.parentNode.classList.toggle('completed')">Complete</button>
+            <button onclick="this.parentNode.parentNode.remove()">Delete</button>
+          </div>
+        \`;
+        
+        list.appendChild(item);
         input.value = '';
-      });
-      
-      // Add todo function
-      function addTodo(text) {
-        if (!text) return;
-        
-        const newTodo = {
-          id: Date.now(),
-          text: text,
-          completed: false
-        };
-        
-        todos.push(newTodo);
-        renderTodos();
       }
-      
-      // Toggle todo
-      function toggleTodo(id) {
-        todos = todos.map(todo => {
-          if (todo.id === id) {
-            todo.completed = !todo.completed;
-          }
-          return todo;
-        });
-        renderTodos();
-      }
-      
-      // Delete todo
-      function deleteTodo(id) {
-        todos = todos.filter(todo => todo.id !== id);
-        renderTodos();
-      }
-      
-      // Render todos
-      function renderTodos() {
-        todosList.innerHTML = '';
-        
-        todos.forEach(todo => {
-          const todoItem = document.createElement('li');
-          todoItem.className = 'todo-item';
-          if (todo.completed) {
-            todoItem.classList.add('completed');
-          }
-          
-          const todoText = document.createElement('span');
-          todoText.textContent = todo.text;
-          
-          const buttonContainer = document.createElement('div');
-          
-          const toggleButton = document.createElement('button');
-          toggleButton.className = 'toggle-btn';
-          toggleButton.textContent = todo.completed ? 'Undo' : 'Complete';
-          toggleButton.addEventListener('click', () => toggleTodo(todo.id));
-          
-          const deleteButton = document.createElement('button');
-          deleteButton.className = 'delete-btn';
-          deleteButton.textContent = 'Delete';
-          deleteButton.addEventListener('click', () => deleteTodo(todo.id));
-          
-          buttonContainer.appendChild(toggleButton);
-          buttonContainer.appendChild(deleteButton);
-          
-          todoItem.appendChild(todoText);
-          todoItem.appendChild(buttonContainer);
-          todosList.appendChild(todoItem);
-        });
-      }
-      
-      // Initial render
-      renderTodos();
     });
   </script>
 </body>
@@ -399,48 +274,14 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       }
     };
     
-    // Reset state
-    reset();
+    // Use our new loadDemoApp function instead of manual state management
+    loadDemoApp(demoApp);
     
-    // Update state with our mock data
-    if (mockSuccessResponse.files) {
-      // Cast the files array to the correct type
-      const typedFiles = mockSuccessResponse.files.map(file => ({
-        ...file,
-        type: file.type as "file" | "folder"
-      }));
-      setFiles(typedFiles);
-      setActiveFile("index.html");
-      setActiveTab("preview");
-    }
+    // Set the active file and tab
+    setActiveFile("index.html");
+    setActiveTab("preview");
     
-    // Process dependencies from mock data
-    const mainDeps: Dependency[] = [];
-    const devDeps: Dependency[] = [];
-    
-    if (mockSuccessResponse.dependencies) {
-      Object.entries(mockSuccessResponse.dependencies).forEach(([name, version]) => {
-        let category: Dependency["category"] = "Utility";
-        if (name === "react" || name === "react-dom") category = "Core";
-        else if (name.includes("router")) category = "Routing";
-        
-        mainDeps.push({ name, version: version.toString(), category });
-      });
-    }
-    
-    if (mockSuccessResponse.devDependencies) {
-      Object.entries(mockSuccessResponse.devDependencies).forEach(([name, version]) => {
-        let category: Dependency["category"] = "Utility";
-        if (name.includes("vite")) category = "Build Tool";
-        
-        devDeps.push({ name, version: version.toString(), category });
-      });
-    }
-    
-    setDependencies(mainDeps);
-    setDevDependencies(devDeps);
-    
-    // Mark as complete
+    // Show success toast
     toast({
       title: "Demo App Loaded",
       description: "A working Todo app has been loaded for demonstration. Check the preview tab to see it in action.",
