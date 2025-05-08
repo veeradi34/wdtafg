@@ -3,6 +3,8 @@ import { RefreshCw, Smartphone, Tablet, Monitor, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PreviewSizeType, FileNode } from "@/lib/types";
 import { Loader2, AlertCircle } from "lucide-react";
+import CreativityMeter from "@/components/CreativityMeter";
+import { GeneratedApp } from "@shared/schema";
 
 interface LivePreviewProps {
   isGenerating: boolean;
@@ -10,6 +12,7 @@ interface LivePreviewProps {
   isError: boolean;
   onRegenerateClick: () => void;
   generatedFiles?: FileNode[];
+  generatedApp?: GeneratedApp;
 }
 
 export default function LivePreview({
@@ -18,6 +21,7 @@ export default function LivePreview({
   isError,
   onRegenerateClick,
   generatedFiles = [],
+  generatedApp,
 }: LivePreviewProps) {
   const [previewSize, setPreviewSize] = useState<PreviewSizeType>("desktop");
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -386,24 +390,37 @@ ${file.content}
         </Button>
       </div>
       
-      {/* Preview area */}
-      <div className="flex-1 overflow-hidden bg-gray-100 dark:bg-gray-900 p-4 flex justify-center items-start">
-        <div 
-          className={`bg-white dark:bg-gray-800 rounded-md shadow-md overflow-hidden transition-all duration-300 flex flex-col ${
-            previewSize === "desktop" 
-              ? "w-full h-full" 
-              : previewSize === "tablet" 
-              ? "w-[768px] h-[1024px]" 
-              : "w-[375px] h-[667px]"
-          }`}
-        >
-          <iframe
-            ref={iframeRef}
-            title="App Preview"
-            className="flex-1 w-full h-full"
-            sandbox="allow-same-origin allow-scripts allow-forms"
-          />
+      {/* Preview area with creativity meter */}
+      <div className="flex-1 overflow-hidden bg-gray-100 dark:bg-gray-900 p-4 flex">
+        {/* App preview */}
+        <div className="flex-1 flex justify-center items-start overflow-auto">
+          <div 
+            className={`bg-white dark:bg-gray-800 rounded-md shadow-md overflow-hidden transition-all duration-300 flex flex-col ${
+              previewSize === "desktop" 
+                ? "w-full h-full" 
+                : previewSize === "tablet" 
+                ? "w-[768px] h-[1024px]" 
+                : "w-[375px] h-[667px]"
+            }`}
+          >
+            <iframe
+              ref={iframeRef}
+              title="App Preview"
+              className="flex-1 w-full h-full"
+              sandbox="allow-same-origin allow-scripts allow-forms"
+            />
+          </div>
         </div>
+        
+        {/* Creativity Metrics Panel - displays when app is complete and metrics are available */}
+        {isComplete && generatedApp && (
+          <div className="w-72 ml-4 flex-shrink-0 overflow-auto">
+            <CreativityMeter
+              metrics={generatedApp.creativityMetrics}
+              isLoading={!generatedApp.creativityMetrics}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
