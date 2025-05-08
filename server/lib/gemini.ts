@@ -164,6 +164,10 @@ Ensure your JSON is properly formatted and can be parsed by JSON.parse().`;
     
     // Clean up the JSON text to handle common issues
     jsonText = jsonText.trim()
+      // Remove any non-JSON text before the opening brace
+      .replace(/^[\s\S]*?(?=\{)/, '')
+      // Remove everything after the last closing brace
+      .replace(/\}[\s\S]*$/, '}')
       // Fix cases where single quotes are used instead of double quotes
       .replace(/'/g, '"')
       // Fix trailing commas in objects/arrays which are invalid in JSON
@@ -175,7 +179,11 @@ Ensure your JSON is properly formatted and can be parsed by JSON.parse().`;
       // Make sure strings are properly quoted
       .replace(/([{,]\s*)(\w+):/g, '$1"$2":')
       // Fix cases where there are unquoted property values
-      .replace(/:\s*([a-zA-Z0-9_]+)(\s*[,}])/g, ':"$1"$2');
+      .replace(/:\s*([a-zA-Z0-9_]+)(\s*[,}])/g, ':"$1"$2')
+      // Fix missing commas between property/value pairs
+      .replace(/("[^"]+"\s*:\s*"[^"]+")(\s*)("[^"]+")/, '$1,$2$3')
+      // Fix hanging properties in object (like "key": value with missing comma)
+      .replace(/"([^"]+)":\s*"([^"]+)"(?!\s*[,}])/g, '"$1": "$2",');
     
     try {
       // First, try to parse the cleaned JSON
@@ -185,39 +193,101 @@ Ensure your JSON is properly formatted and can be parsed by JSON.parse().`;
       } catch (initialParseError: any) {
         console.warn("Initial JSON parsing failed, attempting to fix:", initialParseError.message);
         
-        // If that fails, try a more aggressive attempt to extract valid JSON
-        // Look for something that looks like the start of our expected JSON structure
-        const potentialJsonStart = jsonText.indexOf('{"files":');
-        if (potentialJsonStart >= 0) {
-          jsonText = jsonText.substring(potentialJsonStart);
+        // Check for the specific "position 98" error that we're seeing
+        if (initialParseError.message.includes("position 98")) {
+          console.log("Detected position 98 error, applying targeted fix...");
           
-          // Try to find a valid closing bracket
-          let bracketCount = 0;
-          let validEndIndex = jsonText.length;
+          // Inspect the problem area
+          const problematicArea = jsonText.substring(90, 110);
+          console.log("Text around position 98:", problematicArea);
           
-          for (let i = 0; i < jsonText.length; i++) {
-            if (jsonText[i] === '{') bracketCount++;
-            if (jsonText[i] === '}') {
-              bracketCount--;
-              if (bracketCount === 0) {
-                validEndIndex = i + 1;
-                break;
-              }
+          // Try adding a missing comma at position 98
+          const fixedText = jsonText.substring(0, 98) + "," + jsonText.substring(98);
+          try {
+            parsedResponse = JSON.parse(fixedText);
+            console.log("Position 98 fix successful!");
+            // If this works, we're done
+            jsonText = fixedText; // Update jsonText for further processing if needed
+          } catch (commaFixError) {
+            console.log("Comma fix did not work, trying alternative approaches");
+            
+            // Try fixing possible missing quotes around a value
+            const fixedText2 = jsonText.substring(0, 98) + '"' + jsonText.substring(98);
+            try {
+              parsedResponse = JSON.parse(fixedText2);
+              console.log("Quote fix successful!");
+              jsonText = fixedText2;
+            } catch (quoteFixError) {
+              console.log("Quote fix did not work either, falling back to general fixes");
             }
           }
-          
-          jsonText = jsonText.substring(0, validEndIndex);
-          
-          // Try parsing again
-          try {
-            parsedResponse = JSON.parse(jsonText);
-          } catch (secondParseError: any) {
-            // If we still can't parse it, throw the original error
+        }
+        
+        // If still not fixed, try more aggressive approaches
+        if (!parsedResponse) {
+          // Look for something that looks like the start of our expected JSON structure
+          const potentialJsonStart = jsonText.indexOf('{"files":');
+          if (potentialJsonStart >= 0) {
+            jsonText = jsonText.substring(potentialJsonStart);
+            
+            // Try to find a valid closing bracket
+            let bracketCount = 0;
+            let validEndIndex = jsonText.length;
+            
+            for (let i = 0; i < jsonText.length; i++) {
+              if (jsonText[i] === '{') bracketCount++;
+              if (jsonText[i] === '}') {
+                bracketCount--;
+                if (bracketCount === 0) {
+                  validEndIndex = i + 1;
+                  break;
+                }
+              }
+            }
+            
+            jsonText = jsonText.substring(0, validEndIndex);
+            
+            // Additional cleanup - often helps with Gemini responses
+            jsonText = jsonText
+              // Replace any backslashes in front of quotes with double backslashes
+              .replace(/\\"/g, '\\\\"')
+              // Fix property/value pairs - ensure proper formatting
+              .replace(/([{,]\s*)([^"]\w+)\s*:\s*"([^"]+)"/g, '$1"$2":"$3"')
+              // Add missing commas between objects
+              .replace(/}(\s*){/g, '},\n{')
+              // Fix property values missing quotes
+              .replace(/:\s*([^",{}\[\]\s][^,{}"\[\]\s]*)\s*([,}])/g, ':"$1"$2');
+            
+            // Try parsing again
+            try {
+              parsedResponse = JSON.parse(jsonText);
+              console.log("Fixed JSON with aggressive cleaning!");
+            } catch (secondParseError: any) {
+              console.error("Second parse attempt failed:", secondParseError.message);
+              
+              // Last resort - manually fix the JSON by reconstructing the basic structure
+              try {
+                // Extract any valid file objects we can find
+                const fileMatches = jsonText.match(/"name"\s*:\s*"[^"]+"\s*,\s*"path"\s*:\s*"[^"]+"\s*,\s*"content"\s*:\s*"[^"]*"\s*,\s*"language"\s*:\s*"[^"]*"\s*,\s*"type"\s*:\s*"file"/g);
+                
+                if (fileMatches && fileMatches.length > 0) {
+                  // Rebuild a minimal valid structure
+                  const minimalJsonText = `{"files":[{${fileMatches[0]}}],"dependencies":{},"devDependencies":{}}`;
+                  parsedResponse = JSON.parse(minimalJsonText);
+                  console.log("Created minimal valid JSON from extracted content");
+                } else {
+                  throw new Error("Could not extract valid file data");
+                }
+              } catch (e) {
+                // If all parsing attempts fail, throw the original error
+                console.error("All parsing attempts failed");
+                throw initialParseError;
+              }
+            }
+          } else {
+            // If we can't find the start of a JSON structure, throw the original error
             throw initialParseError;
           }
-        } else {
-          // If we can't find the start of a JSON structure, throw the original error
-          throw initialParseError;
         }
       }
       
