@@ -135,7 +135,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Error fixing endpoint - uses Gemini to fix code errors
   app.post("/api/fix-errors", async (req: Request, res: Response) => {
     try {
-      const { errors, files } = req.body;
+      const { errors, files, framework } = req.body;
       
       if (!errors || !errors.length || !files || !files.length) {
         return res.status(400).json({ 
@@ -148,7 +148,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Call the Gemini API to fix the errors
       const { fixAppErrors } = await import("./lib/gemini");
-      const result = await fixAppErrors(errors, files);
+      const result = await fixAppErrors(errors, files, framework || "React");
       
       if (result.success) {
         res.json({

@@ -226,12 +226,10 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     // Reset state and prepare to load test files
     reset();
     
-    // Mark as complete to show the preview
+    // Mark as complete to show the preview by simulating a successful generation
     setTimeout(() => {
-      // We need to set this to simulate a complete generation
-      // This is just for testing the error detection
-      // @ts-ignore - we're intentionally bypassing type checking for the test
-      setIsComplete(true);
+      // Generate a dummy app to set isComplete to true
+      generateApp("Test error app", projectSettings);
     }, 100);
     
     toast({

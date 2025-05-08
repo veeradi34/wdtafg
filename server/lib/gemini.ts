@@ -53,9 +53,28 @@ export async function generateApp({
       },
     ];
 
-    // Build a simplified system prompt to reduce token usage and avoid rate limits
-    const systemPrompt = `As an expert ${framework} developer, create a minimal but functional web app based on this description.
-Use ${styling} for styling, ${stateManagement} for state management, and ${buildTool} as the build tool.
+    // Build a comprehensive system prompt for high-quality UI/UX generation
+    const systemPrompt = `As an elite ${framework} developer and UI/UX expert, create a polished, production-ready web app based on this description.
+Use ${styling} for styling with a professional, modern aesthetic, ${stateManagement} for state management, and ${buildTool} as the build tool.
+
+DESIGN REQUIREMENTS:
+- Create a visually stunning, professional UI with careful attention to spacing, alignment, and typography
+- Use a cohesive color scheme with proper contrast ratios for accessibility (WCAG AA compliant)
+- Implement responsive layouts that look great on all device sizes
+- Include polished micro-interactions, transitions, and loading states
+- Design clean, intuitive navigation and user flows
+- Use industry best practices for form design and validation
+- Implement proper error handling with user-friendly error messages
+
+CODE REQUIREMENTS:
+- Write clean, maintainable, well-structured code
+- Use proper component composition and reusable components
+- Implement proper state management with ${stateManagement}
+- Ensure responsive behavior works correctly on all screen sizes
+- Include loading states and error handling
+- Use semantic HTML and proper accessibility attributes
+- Add comments for complex logic
+
 Output a valid JSON object with this structure:
 {
   "files": [
@@ -76,7 +95,6 @@ Output a valid JSON object with this structure:
   "dependencies": { "package-name": "version" },
   "devDependencies": { "package-name": "version" }
 }
-Include only essential files needed for a working MVP.
 `;
 
     // Generate content with system and user prompts - with shorter, more concise prompt
@@ -206,7 +224,7 @@ export async function testGeminiAPI(): Promise<string> {
 }
 
 // Function to fix errors in generated code using Gemini
-export async function fixAppErrors(errors: string[], files: FileNode[]): Promise<{ 
+export async function fixAppErrors(errors: string[], files: FileNode[], framework: FrameworkType = "React"): Promise<{ 
   success: boolean; 
   files?: FileNode[]; 
   error?: string 
@@ -215,8 +233,8 @@ export async function fixAppErrors(errors: string[], files: FileNode[]): Promise
     // Get the Gemini model
     const model = geminiAPI.getGenerativeModel({ model: MODEL });
 
-    // Build a prompt that explains the errors and provides the files
-    let prompt = `You are a code error fixing expert. The following JavaScript/TypeScript application has errors:
+    // Build a comprehensive prompt that explains the errors and provides the files
+    let prompt = `You are an expert ${framework} developer and UI/UX specialist. The following web application has errors and needs optimization:
 
 ERRORS DETECTED:
 ${errors.map((error, i) => `${i+1}. ${error}`).join('\n')}
@@ -233,8 +251,16 @@ FILES WITH POTENTIAL ISSUES:
     prompt += `
 INSTRUCTIONS:
 1. Analyze the errors and find their root causes.
-2. Fix the code in the affected files.
-3. Return ONLY the fixed files as a JSON object in exactly this format:
+2. Fix all technical errors in the affected files.
+3. Additionally, enhance the UI/UX by:
+   - Improving visual aesthetics with better spacing, typography, and color usage
+   - Adding appropriate transitions and loading states
+   - Enhancing component structure and reusability
+   - Ensuring responsive design works properly
+   - Improving accessibility
+   - Making the interface more intuitive and user-friendly
+
+4. Return ONLY the fixed and enhanced files as a JSON object in exactly this format:
 {
   "files": [
     {
@@ -247,7 +273,7 @@ INSTRUCTIONS:
 }
 
 Do not include any explanations, markdown formatting, or text outside of this JSON structure.
-Only fix the actual errors - do not rewrite or redesign the entire application.
+Fix all errors while also significantly improving the visual design and user experience.
 `;
 
     // Add retry logic for rate limit handling

@@ -482,7 +482,8 @@ export default function LivePreview({
                             },
                             body: JSON.stringify({
                               errors: previewErrors,
-                              files: relevantFiles
+                              files: relevantFiles,
+                              framework: "React" // Pass the framework information
                             }),
                           })
                           .then(response => response.json())
