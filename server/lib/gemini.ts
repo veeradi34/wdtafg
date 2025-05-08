@@ -53,29 +53,35 @@ export async function generateApp({
       },
     ];
 
-    // Build a comprehensive system prompt for high-quality UI/UX generation
-    const systemPrompt = `As an elite ${framework} developer and UI/UX expert, create a polished, production-ready web app based on this description.
-Use ${styling} for styling with a professional, modern aesthetic, ${stateManagement} for state management, and ${buildTool} as the build tool.
+    // Build a comprehensive system prompt for high-quality UI/UX generation with strict JSON output format
+    const systemPrompt = `You are an expert ${framework} developer with UI/UX specialization. Your task is to create a production-ready web application based on a user's description.
+
+TECHNICAL SPECIFICATIONS:
+- Framework: ${framework}
+- Styling: ${styling}
+- State Management: ${stateManagement}
+- Build Tool: ${buildTool}
 
 DESIGN REQUIREMENTS:
-- Create a visually stunning, professional UI with careful attention to spacing, alignment, and typography
-- Use a cohesive color scheme with proper contrast ratios for accessibility (WCAG AA compliant)
-- Implement responsive layouts that look great on all device sizes
-- Include polished micro-interactions, transitions, and loading states
-- Design clean, intuitive navigation and user flows
-- Use industry best practices for form design and validation
-- Implement proper error handling with user-friendly error messages
+- Professional UI with careful attention to spacing, alignment, and typography
+- Cohesive color scheme with proper contrast ratios (WCAG AA compliant)
+- Responsive layouts for all device sizes
+- Smooth transitions and loading states
+- Intuitive navigation and user flows
+- Best practices for form design and validation
+- User-friendly error messages
 
 CODE REQUIREMENTS:
-- Write clean, maintainable, well-structured code
-- Use proper component composition and reusable components
-- Implement proper state management with ${stateManagement}
-- Ensure responsive behavior works correctly on all screen sizes
-- Include loading states and error handling
-- Use semantic HTML and proper accessibility attributes
-- Add comments for complex logic
+- Clean, maintainable code structure
+- Reusable components and proper component composition
+- Effective state management with ${stateManagement}
+- Responsive design implementation
+- Loading states and error handling
+- Semantic HTML and accessibility
+- Comments for complex logic
 
-Output a valid JSON object with this structure:
+CRITICAL INSTRUCTION:
+Your response MUST be valid, parsable JSON in exactly this format:
 {
   "files": [
     {
@@ -84,21 +90,29 @@ Output a valid JSON object with this structure:
       "content": "file content",
       "language": "js|tsx|css|html|json",
       "type": "file"
-    },
-    {
-      "name": "directory",
-      "path": "/path/to/directory",
-      "type": "folder",
-      "children": [ /* nested files/folders */ ]
     }
   ],
   "dependencies": { "package-name": "version" },
   "devDependencies": { "package-name": "version" }
 }
+
+AVOID COMMON ERRORS:
+- Do not put backticks, markdown formatting, or explanations outside the JSON
+- Ensure all quotes, brackets, and commas are properly balanced
+- Double-check that all properties have values in the correct format
+- Make sure all strings are properly escaped, especially when they contain quotes or special characters
+- Do not use trailing commas in arrays or objects
 `;
 
-    // Generate content with system and user prompts - with shorter, more concise prompt
-    const fullPrompt = systemPrompt + "\n\nUser Request: " + prompt + "\n\nProvide JSON response only:";
+    // Generate content with system and user prompts with explicit JSON response requirement
+    const fullPrompt = `${systemPrompt}
+
+USER REQUEST: ${prompt}
+
+RESPONSE FORMAT:
+Only respond with a valid JSON object. Do not include any text before or after the JSON.
+Do not use markdown code blocks, backticks, or any other formatting.
+Ensure your JSON is properly formatted and can be parsed by JSON.parse().`;
     
     // Add retry mechanism for rate limit handling
     let retries = 0;
@@ -112,6 +126,9 @@ Output a valid JSON object with this structure:
           generationConfig: {
             temperature: 0.4,
             maxOutputTokens: 8192,
+            topK: 40,
+            topP: 0.8,
+            responseMimeType: "application/json",
           },
           safetySettings
         });
@@ -242,7 +259,7 @@ Output a valid JSON object with this structure:
   }
 }
 
-// Simple test to check if the Gemini integration is working
+// Test to check if the Gemini integration is working with JSON output
 export async function testGeminiAPI(): Promise<string> {
   try {
     const model = geminiAPI.getGenerativeModel({ model: "gemini-1.5-flash" });
@@ -252,15 +269,30 @@ export async function testGeminiAPI(): Promise<string> {
     const maxRetries = 3;
     let result;
     
+    const testPrompt = `Return a simple test object as valid JSON with this exact structure:
+{
+  "test": "success",
+  "message": "Hello World",
+  "timestamp": "current time"
+}
+
+IMPORTANT:
+- Return ONLY JSON. No text or markdown formatting before or after.
+- No code fences or backticks.
+- Ensure the JSON can be parsed by JSON.parse().`;
+    
     while (retries < maxRetries) {
       try {
         result = await model.generateContent({
           contents: [{ 
             role: "user", 
-            parts: [{ text: "Return a simple Hello World message as JSON with a property called 'message'." }] 
+            parts: [{ text: testPrompt }] 
           }],
           generationConfig: {
             temperature: 0,
+            responseMimeType: "application/json",
+            topK: 40,
+            topP: 0.8,
           }
         });
         break; // If successful, exit the retry loop
@@ -286,7 +318,32 @@ export async function testGeminiAPI(): Promise<string> {
     }
 
     const response = result.response;
-    return response.text();
+    const text = response.text();
+    
+    // Test our JSON parsing logic
+    try {
+      // Extract and clean the JSON
+      const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/) || text.match(/```([\s\S]*?)```/) || [null, text];
+      let jsonText = jsonMatch[1] || text;
+      
+      // Clean up the JSON text using the same logic as in generateApp
+      jsonText = jsonText.trim()
+        .replace(/'/g, '"')
+        .replace(/,(\s*[\]}])/g, '$1')
+        .replace(/}(\s*){/g, '},{')
+        .replace(/"undefined"/g, 'null')
+        .replace(/([{,]\s*)(\w+):/g, '$1"$2":')
+        .replace(/:\s*([a-zA-Z0-9_]+)(\s*[,}])/g, ':"$1"$2');
+      
+      // Try to parse the JSON
+      const parsedResponse = JSON.parse(jsonText);
+      
+      // Return success message with parsed data
+      return `Gemini API test successful! Response: ${JSON.stringify(parsedResponse)}`;
+    } catch (parseError: any) {
+      // If parsing failed, return the raw text and error
+      return `Gemini API responded but JSON parsing failed: ${parseError.message}. Raw response was: ${text.substring(0, 200)}...`;
+    }
   } catch (error: any) {
     console.error("Gemini API test failed:", error);
     return `Gemini API test failed: ${error.message || "Unknown error"}`;
@@ -303,14 +360,13 @@ export async function fixAppErrors(errors: string[], files: FileNode[], framewor
     // Get the Gemini model
     const model = geminiAPI.getGenerativeModel({ model: MODEL });
 
-    // Build a comprehensive prompt that explains the errors and provides the files
-    let prompt = `You are an expert ${framework} developer and UI/UX specialist. The following web application has errors and needs optimization:
+    // Build a comprehensive prompt optimized for reliable JSON response
+    let prompt = `You are an expert ${framework} developer and UI/UX specialist. Your task is to fix errors and enhance a web application.
 
 ERRORS DETECTED:
 ${errors.map((error, i) => `${i+1}. ${error}`).join('\n')}
 
-FILES WITH POTENTIAL ISSUES:
-`;
+FILES WITH ISSUES:`;
 
     // Add the files content to the prompt
     const relevantFiles = files.filter(f => f.type === "file" && f.content);
@@ -319,18 +375,18 @@ FILES WITH POTENTIAL ISSUES:
     });
 
     prompt += `
-INSTRUCTIONS:
-1. Analyze the errors and find their root causes.
-2. Fix all technical errors in the affected files.
-3. Additionally, enhance the UI/UX by:
-   - Improving visual aesthetics with better spacing, typography, and color usage
-   - Adding appropriate transitions and loading states
-   - Enhancing component structure and reusability
-   - Ensuring responsive design works properly
-   - Improving accessibility
-   - Making the interface more intuitive and user-friendly
+REQUIRED FIXES:
+1. Fix all technical errors in the code
+2. Enhance UI/UX with:
+   - Better spacing, typography, and color usage
+   - Smooth transitions and loading states
+   - Improved component structure and reusability
+   - Responsive design enhancements
+   - Better accessibility
+   - More intuitive interface
 
-4. Return ONLY the fixed and enhanced files as a JSON object in exactly this format:
+CRITICAL INSTRUCTION:
+Your response MUST be valid, parsable JSON in exactly this format:
 {
   "files": [
     {
@@ -342,9 +398,17 @@ INSTRUCTIONS:
   ]
 }
 
-Do not include any explanations, markdown formatting, or text outside of this JSON structure.
-Fix all errors while also significantly improving the visual design and user experience.
-`;
+AVOID COMMON ERRORS:
+- Do not put backticks, markdown formatting, or explanations outside the JSON
+- Ensure all quotes, brackets, and commas are properly balanced
+- Double-check that all properties have values in the correct format
+- Make sure all strings are properly escaped, especially when they contain quotes or special characters
+- Do not use trailing commas in arrays or objects
+
+RESPONSE FORMAT:
+Only respond with a valid JSON object. Do not include any text before or after the JSON.
+Do not use markdown code blocks, backticks, or any other formatting.
+Ensure your JSON is properly formatted and can be parsed by JSON.parse().`;
 
     // Add retry logic for rate limit handling
     let retries = 0;
@@ -358,6 +422,9 @@ Fix all errors while also significantly improving the visual design and user exp
           generationConfig: {
             temperature: 0.2,
             maxOutputTokens: 8192,
+            topK: 40,
+            topP: 0.8,
+            responseMimeType: "application/json",
           }
         });
         break; // If successful, exit the retry loop
