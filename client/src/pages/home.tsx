@@ -111,7 +111,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   // App generation logic
   const { 
     generateApp, 
-    reset, 
+    reset,
+    loadDemoApp,
     isGenerating, 
     isComplete, 
     error 
