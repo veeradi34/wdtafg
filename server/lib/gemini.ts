@@ -4,8 +4,9 @@ import { FileNode, GeneratedApp } from "@shared/schema";
 // Initialize Google Generative AI with API key
 const geminiAPI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
-// The latest Gemini model
-const MODEL = "gemini-1.5-pro";
+// Using a less resource-intensive model that has higher quota limits
+// This will help avoid rate limiting issues on the free tier
+const MODEL = "gemini-1.5-flash";
 
 type FrameworkType = "React" | "Vue" | "Angular";
 type StylingType = "Tailwind CSS" | "Material UI" | "Styled Components" | "CSS Modules";
@@ -52,11 +53,10 @@ export async function generateApp({
       },
     ];
 
-    // Build the system prompt
-    const systemPrompt = `You are an expert ${framework} developer who specializes in creating complete web applications.
-Your task is to generate a complete web application based on the user's description.
+    // Build a simplified system prompt to reduce token usage and avoid rate limits
+    const systemPrompt = `As an expert ${framework} developer, create a minimal but functional web app based on this description.
 Use ${styling} for styling, ${stateManagement} for state management, and ${buildTool} as the build tool.
-You must output a valid JSON object with this structure:
+Output a valid JSON object with this structure:
 {
   "files": [
     {
@@ -76,25 +76,48 @@ You must output a valid JSON object with this structure:
   "dependencies": { "package-name": "version" },
   "devDependencies": { "package-name": "version" }
 }
-Include all necessary files to make the application functional, including:
-- Main application files
-- Component files
-- Style files
-- Configuration files (package.json, etc.)
-- Ensure proper imports, routing, and state management based on the technologies specified
+Include only essential files needed for a working MVP.
 `;
 
-    // Generate content with system and user prompts
-    const fullPrompt = systemPrompt + "\n\nUser Request: " + prompt + "\n\nPlease provide the JSON response as described above:";
+    // Generate content with system and user prompts - with shorter, more concise prompt
+    const fullPrompt = systemPrompt + "\n\nUser Request: " + prompt + "\n\nProvide JSON response only:";
     
-    const result = await generativeModel.generateContent({
-      contents: [{ role: "user", parts: [{ text: fullPrompt }] }],
-      generationConfig: {
-        temperature: 0.4,
-        maxOutputTokens: 8192,
-      },
-      safetySettings
-    });
+    // Add retry mechanism for rate limit handling
+    let retries = 0;
+    const maxRetries = 3;
+    let result;
+    
+    while (retries < maxRetries) {
+      try {
+        result = await generativeModel.generateContent({
+          contents: [{ role: "user", parts: [{ text: fullPrompt }] }],
+          generationConfig: {
+            temperature: 0.4,
+            maxOutputTokens: 8192,
+          },
+          safetySettings
+        });
+        break; // If successful, exit the retry loop
+      } catch (err: any) {
+        // Check if it's a rate limit error (429)
+        if (err.message && err.message.includes('429') && retries < maxRetries - 1) {
+          retries++;
+          console.log(`Rate limit hit, retrying (${retries}/${maxRetries})...`);
+          
+          // Wait with exponential backoff (1s, 2s, 4s, etc.)
+          const delay = 1000 * Math.pow(2, retries - 1);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        
+        // For other errors or if we've exhausted retries, rethrow
+        throw err;
+      }
+    }
+    
+    if (!result) {
+      throw new Error("Failed to generate content after multiple attempts");
+    }
 
     const response = result.response;
     const text = response.text();
@@ -136,15 +159,43 @@ export async function testGeminiAPI(): Promise<string> {
   try {
     const model = geminiAPI.getGenerativeModel({ model: "gemini-1.5-flash" });
     
-    const result = await model.generateContent({
-      contents: [{ 
-        role: "user", 
-        parts: [{ text: "Return a simple Hello World message as JSON with a property called 'message'." }] 
-      }],
-      generationConfig: {
-        temperature: 0,
+    // Add retry logic similar to generateApp
+    let retries = 0;
+    const maxRetries = 3;
+    let result;
+    
+    while (retries < maxRetries) {
+      try {
+        result = await model.generateContent({
+          contents: [{ 
+            role: "user", 
+            parts: [{ text: "Return a simple Hello World message as JSON with a property called 'message'." }] 
+          }],
+          generationConfig: {
+            temperature: 0,
+          }
+        });
+        break; // If successful, exit the retry loop
+      } catch (err: any) {
+        // Check if it's a rate limit error (429)
+        if (err.message && err.message.includes('429') && retries < maxRetries - 1) {
+          retries++;
+          console.log(`Rate limit hit in test, retrying (${retries}/${maxRetries})...`);
+          
+          // Wait with exponential backoff (1s, 2s, 4s, etc.)
+          const delay = 1000 * Math.pow(2, retries - 1);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        
+        // For other errors or if we've exhausted retries, rethrow
+        throw err;
       }
-    });
+    }
+    
+    if (!result) {
+      return 'Failed to test API after multiple attempts';
+    }
 
     const response = result.response;
     return response.text();
