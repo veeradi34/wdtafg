@@ -92,23 +92,50 @@ export default function LivePreview({
                           <head>
                             <meta charset="UTF-8">
                             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                            <title>Preview</title>
+                            <title>ZeroCode Live Preview</title>
+                            <!-- Cross-browser compatibility meta tags -->
+                            <meta http-equiv="X-UA-Compatible" content="IE=edge">
+                            <!-- Prevent cache issues during development -->
+                            <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+                            <meta http-equiv="Pragma" content="no-cache">
+                            <meta http-equiv="Expires" content="0">
                             <style id="inject-css"></style>
                           </head>
                           <body>
+                            <div id="root"></div>
                             <div id="app"></div>
                             <script id="inject-js"></script>
                           </body>
                         </html>`;
                         
-      // Find CSS files
-      const cssContent = findFileContent(files, ".css") || "";
+      // Find all CSS files - combine multiple CSS files if found
+      let cssContent = "";
+      files.forEach(file => {
+        if (file.type === "file" && file.name.endsWith(".css") && file.content) {
+          cssContent += `/* ${file.name} */\n${file.content}\n\n`;
+        }
+      });
       
-      // Find JS files
-      const jsContent = findFileContent(files, ".js") || 
-                        findFileContent(files, ".jsx") || 
-                        findFileContent(files, ".ts") || 
-                        findFileContent(files, ".tsx") || "";
+      // Find main JS entry file - prioritize index.js or main.js
+      let jsContent = "";
+      const entryFile = files.find(file => 
+        file.type === "file" && 
+        (file.name === "index.js" || file.name === "main.js" || file.name === "App.js")
+      );
+      
+      if (entryFile && entryFile.content) {
+        jsContent = entryFile.content;
+      } else {
+        // No entry file found, concatenate all JS files
+        files.forEach(file => {
+          if (file.type === "file" && 
+             (file.name.endsWith(".js") || file.name.endsWith(".jsx") || 
+              file.name.endsWith(".ts") || file.name.endsWith(".tsx")) && 
+             file.content) {
+            jsContent += `// ${file.name}\n${file.content}\n\n`;
+          }
+        });
+      }
 
       // Insert CSS and JS into HTML
       let finalHtml = htmlContent;
@@ -128,22 +155,26 @@ export default function LivePreview({
       if (iframeRef.current) {
         const iframeDoc = iframeRef.current.contentDocument;
         if (iframeDoc) {
-          // Add error listener to iframe
+          // Add enhanced error listener to iframe with improved debugging capabilities
           const errorScript = `
             <script>
+              // Error handling - capture all JS errors
               window.onerror = function(message, source, lineno, colno, error) {
                 window.parent.postMessage({
                   type: 'preview-error',
                   payload: {
                     message: message,
                     source: source,
-                    lineno: lineno,
-                    colno: colno,
+                    line: lineno,
+                    column: colno,
                     stack: error ? error.stack : ''
                   }
                 }, '*');
-                return true;
+                return true; // Prevent default error handling
               };
+              
+              // Console error interception
+              window.originalConsoleError = console.error;
               console.error = function() {
                 const args = Array.from(arguments);
                 window.parent.postMessage({
@@ -153,7 +184,31 @@ export default function LivePreview({
                 // Call the original console.error with the arguments
                 window.originalConsoleError.apply(console, arguments);
               };
-              window.originalConsoleError = console.error;
+              
+              // Add React error boundary equivalent for non-React errors
+              window.addEventListener('error', function(event) {
+                if (event.error && event.error.name) {
+                  window.parent.postMessage({
+                    type: 'preview-error',
+                    payload: {
+                      message: event.error.message,
+                      name: event.error.name,
+                      stack: event.error.stack
+                    }
+                  }, '*');
+                }
+              });
+              
+              // Handle unhandled promise rejections
+              window.addEventListener('unhandledrejection', function(event) {
+                window.parent.postMessage({
+                  type: 'preview-error',
+                  payload: {
+                    message: 'Unhandled Promise Rejection: ' + (event.reason ? event.reason.message || event.reason : 'Unknown reason'),
+                    stack: event.reason && event.reason.stack
+                  }
+                }, '*');
+              });
             </script>
           `;
           
@@ -392,23 +447,8 @@ export default function LivePreview({
 
   const renderPreviewContent = () => {
     if (isComplete && generatedFiles.length > 0) {
-      // Check if this is a calculator app
-      const isCalculator = generatedFiles.some(file => 
-        file.content && 
-        (file.content.includes("calculator") || 
-         file.content.includes("Calculator") ||
-         file.content.includes("math.") ||
-         file.content.includes("Math.") ||
-         file.content.includes("add(") ||
-         file.content.includes("subtract(") ||
-         file.content.includes("multiply(") ||
-         file.content.includes("divide("))
-      );
-      
-      // Show calculator-specific preview if it's a calculator app
-      if (isCalculator) {
-        return <Calculator />;
-      }
+      // Use iframe-based preview for all apps
+      // This is more flexible and handles any type of app
       
       // Show the iframe with the generated content
       if (previewHtml) {
