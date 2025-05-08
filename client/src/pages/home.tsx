@@ -182,9 +182,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     setPrompt("Build me a React dashboard with a data table and chart for tracking sales data. Include filtering and sorting capabilities.");
   };
   
-  // Test function to load our error test app with more realistic scenarios
+  // Function to load our fixed test app for demonstration
   const handleLoadErrorTest = () => {
-    // Load our test files with intentional errors for various scenarios
+    // Load our corrected test files for the todo app
     const newTestFiles: FileNode[] = [
       {
         name: "index.html",
@@ -210,36 +210,33 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         path: "/app.js",
         type: "file",
         language: "javascript",
-        content: `// Main application file with several common errors
+        content: `// Main application file
 document.addEventListener('DOMContentLoaded', function() {
   const root = document.getElementById('root');
   const todoApp = new TodoApp();
   todoApp.render(root);
 });
 
-// TodoApp class with errors
+// TodoApp class
 class TodoApp {
   constructor() {
     this.todos = [];
     this.nextId = 1;
+    this.inputElement = null;
     
-    // Error 1: Missing event argument in event handler
-    this.handleSubmit = function() {
-      event.preventDefault(); // ReferenceError: event is not defined
-      this.addTodo(this.inputValue);
-    }
-    
-    // Error 2: Undefined property
-    this.inputValue = this.getInputValue();
+    // Fixed event handler with proper event parameter
+    this.handleSubmit = function(event) {
+      event.preventDefault();
+      this.addTodo(this.getInputValue());
+    }.bind(this);
   }
   
-  // Error 3: Method implementation missing
+  // Fixed method to get input value
   getInputValue() {
-    // Method left unimplemented
-    return this.inputElement.value; // TypeError: Cannot read properties of undefined
+    return this.inputElement ? this.inputElement.value : '';
   }
   
-  // Error 4: Incorrect array method
+  // Fixed add todo method
   addTodo(text) {
     if (!text) return;
     
@@ -249,9 +246,14 @@ class TodoApp {
       completed: false
     });
     
-    // Error: Using non-existent array method
-    const incompleteTodos = this.todos.whereNot(todo => todo.completed);
+    // Fixed to use standard array filter instead of non-existent whereNot
+    const incompleteTodos = this.todos.filter(todo => !todo.completed);
     this.renderTodos();
+    
+    // Clear input after adding
+    if (this.inputElement) {
+      this.inputElement.value = '';
+    }
   }
   
   render(container) {
@@ -294,7 +296,9 @@ class TodoApp {
   }
   
   renderTodos() {
-    // Error 5: Missing null check
+    // Fixed with null check
+    if (!this.todosContainer) return;
+    
     this.todosContainer.innerHTML = '';
     
     this.todos.forEach(todo => {
@@ -351,11 +355,13 @@ class TodoApp {
   padding: 20px;
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
   border-radius: 8px;
+  background-color: #ffffff;
 }
 
 h1 {
   text-align: center;
   color: #333;
+  margin-bottom: 1.5rem;
 }
 
 form {
@@ -369,6 +375,12 @@ input {
   border: 1px solid #ddd;
   border-radius: 4px 0 0 4px;
   font-size: 16px;
+  outline: none;
+  transition: border-color 0.3s;
+}
+
+input:focus {
+  border-color: #4CAF50;
 }
 
 form button {
@@ -379,6 +391,7 @@ form button {
   border-radius: 0 4px 4px 0;
   cursor: pointer;
   font-size: 16px;
+  transition: background-color 0.3s;
 }
 
 form button:hover {
@@ -398,6 +411,18 @@ form button:hover {
   margin-bottom: 10px;
   background-color: #f9f9f9;
   border-radius: 4px;
+  transition: all 0.3s ease;
+  border-left: 3px solid #4CAF50;
+}
+
+.todo-item:hover {
+  transform: translateX(3px);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.todo-item.completed {
+  border-left-color: #888;
+  opacity: 0.8;
 }
 
 .todo-item.completed span {
@@ -411,6 +436,7 @@ form button:hover {
   border: none;
   border-radius: 4px;
   cursor: pointer;
+  transition: background-color 0.3s;
 }
 
 .todo-item button:first-of-type {
@@ -418,9 +444,17 @@ form button:hover {
   color: white;
 }
 
+.todo-item button:first-of-type:hover {
+  background-color: #0b7dda;
+}
+
 .todo-item button:last-child {
   background-color: #f44336;
   color: white;
+}
+
+.todo-item button:last-child:hover {
+  background-color: #d32f2f;
 }`
       }
     ];
@@ -433,15 +467,15 @@ form button:hover {
     // Reset state and prepare to load test files
     reset();
     
-    // Mark as complete to show the preview by simulating a successful generation
+    // Directly set the application state to complete without making an API call
     setTimeout(() => {
-      // Generate a dummy app to set isComplete to true
-      generateApp("Test error app", projectSettings);
+      // Instead of calling the API, just update the state directly
+      setIsComplete(true);
     }, 100);
     
     toast({
-      title: "Error Test Loaded",
-      description: "Test app with intentional errors has been loaded. Check the preview tab for the error detection.",
+      title: "Demo App Loaded",
+      description: "A working Todo app has been loaded for demonstration. Check the preview tab to see it in action.",
     });
   };
 

@@ -106,9 +106,9 @@ export default function PromptInput({
               size="sm"
               onClick={onTestError}
               disabled={isGenerating}
-              className="bg-red-50 hover:bg-red-100 text-red-500 border-red-200"
+              className="bg-blue-50 hover:bg-blue-100 text-blue-600 border-blue-200"
             >
-              Test Error Fix
+              Load Demo App
             </Button>
           )}
           <Button
