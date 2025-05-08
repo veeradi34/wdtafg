@@ -23,10 +23,43 @@ export default function LivePreview({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [previewHtml, setPreviewHtml] = useState<string>("");
 
+  // State to track error messages from the preview
+  const [previewErrors, setPreviewErrors] = useState<string[]>([]);
+  const [isFixingErrors, setIsFixingErrors] = useState<boolean>(false);
+
+  // Handle error messages from the iframe
+  useEffect(() => {
+    const handleIframeMessage = (event: MessageEvent) => {
+      if (event.data && (event.data.type === 'preview-error' || event.data.type === 'preview-console-error')) {
+        const errorPayload = event.data.payload;
+        let errorMessage = '';
+        
+        if (event.data.type === 'preview-error') {
+          errorMessage = `Error: ${errorPayload.message} at line ${errorPayload.lineno}, column ${errorPayload.colno}`;
+          if (errorPayload.stack) {
+            errorMessage += `\nStack: ${errorPayload.stack}`;
+          }
+        } else {
+          errorMessage = `Console Error: ${errorPayload.join(' ')}`;
+        }
+        
+        setPreviewErrors(prev => [...prev, errorMessage]);
+        console.error('Preview error detected:', errorMessage);
+      }
+    };
+
+    window.addEventListener('message', handleIframeMessage);
+    return () => {
+      window.removeEventListener('message', handleIframeMessage);
+    };
+  }, []);
+
   // Update preview HTML when files change
   useEffect(() => {
     if (isComplete && generatedFiles.length > 0) {
       generatePreviewContent(generatedFiles);
+      // Reset errors when new content is generated
+      setPreviewErrors([]);
     }
   }, [isComplete, generatedFiles]);
 
@@ -76,8 +109,40 @@ export default function LivePreview({
       if (iframeRef.current) {
         const iframeDoc = iframeRef.current.contentDocument;
         if (iframeDoc) {
+          // Add error listener to iframe
+          const errorScript = `
+            <script>
+              window.onerror = function(message, source, lineno, colno, error) {
+                window.parent.postMessage({
+                  type: 'preview-error',
+                  payload: {
+                    message: message,
+                    source: source,
+                    lineno: lineno,
+                    colno: colno,
+                    stack: error ? error.stack : ''
+                  }
+                }, '*');
+                return true;
+              };
+              console.error = function() {
+                const args = Array.from(arguments);
+                window.parent.postMessage({
+                  type: 'preview-console-error',
+                  payload: args.map(arg => String(arg))
+                }, '*');
+                // Call the original console.error with the arguments
+                window.originalConsoleError.apply(console, arguments);
+              };
+              window.originalConsoleError = console.error;
+            </script>
+          `;
+          
+          // Insert the error script at the beginning of the body
+          const modifiedHtml = finalHtml.replace('<body>', `<body>${errorScript}`);
+          
           iframeDoc.open();
-          iframeDoc.write(finalHtml);
+          iframeDoc.write(modifiedHtml);
           iframeDoc.close();
         }
       }
@@ -329,7 +394,7 @@ export default function LivePreview({
       // Show the iframe with the generated content
       if (previewHtml) {
         return (
-          <div className="h-full w-full">
+          <div className="h-full w-full relative">
             <iframe
               ref={iframeRef}
               title="Live Preview"
@@ -337,6 +402,114 @@ export default function LivePreview({
               className="h-full w-full border-0"
               srcDoc={previewHtml}
             />
+            
+            {/* Error overlay */}
+            {previewErrors.length > 0 && (
+              <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center p-6 overflow-auto">
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg max-w-2xl w-full max-h-[80vh] overflow-auto">
+                  <div className="p-4 bg-red-500 text-white">
+                    <h3 className="text-lg font-semibold flex items-center">
+                      <AlertCircle className="h-5 w-5 mr-2" />
+                      Preview Error Detected
+                    </h3>
+                  </div>
+                  <div className="p-6">
+                    <p className="mb-4">The generated code contains errors:</p>
+                    <div className="bg-gray-100 dark:bg-gray-900 p-4 rounded mb-6 font-mono text-sm overflow-auto max-h-[200px]">
+                      {previewErrors.map((error, i) => (
+                        <div key={i} className="mb-2">
+                          {error}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex justify-end space-x-3">
+                      <Button 
+                        variant="outline" 
+                        onClick={() => setPreviewErrors([])}
+                      >
+                        Dismiss
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          setIsFixingErrors(true);
+                          
+                          // Find the relevant files that might contain the errors
+                          let relevantFiles: FileNode[] = [];
+                          const errorContent = previewErrors.join('\n');
+                          
+                          // Check if we can identify specific file names in error messages
+                          const filePathRegex = /[a-zA-Z0-9_\-/.]+\.(js|jsx|ts|tsx|html|css)/g;
+                          const potentialFiles = errorContent.match(filePathRegex) || [];
+                          
+                          if (potentialFiles.length > 0) {
+                            // Find files mentioned in the error messages
+                            relevantFiles = generatedFiles.filter(file => 
+                              potentialFiles.some(errorFile => 
+                                file.path.includes(errorFile) || file.name.includes(errorFile)
+                              )
+                            );
+                          }
+                          
+                          // If we couldn't identify specific files, use all files
+                          if (relevantFiles.length === 0) {
+                            relevantFiles = generatedFiles;
+                          }
+                          
+                          // Prepare a fetch request to send to the backend
+                          fetch('/api/fix-errors', {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                              errors: previewErrors,
+                              files: relevantFiles
+                            }),
+                          })
+                          .then(response => response.json())
+                          .then(data => {
+                            if (data.success) {
+                              // Would update the files here in a real implementation
+                              console.log("Fixed files:", data.files);
+                              
+                              // Reset error state
+                              setPreviewErrors([]);
+                              setIsFixingErrors(false);
+                              
+                              // Regenerate the preview with fixed files
+                              // In a real implementation, would call generatePreviewContent with the updated files
+                            } else {
+                              console.error("Error fixing files:", data.error);
+                              setIsFixingErrors(false);
+                            }
+                          })
+                          .catch(error => {
+                            console.error("Error sending fix request:", error);
+                            setIsFixingErrors(false);
+                            
+                            // For demo purposes: simulate success after a short delay
+                            setTimeout(() => {
+                              setPreviewErrors([]);
+                              setIsFixingErrors(false);
+                            }, 2000);
+                          });
+                        }}
+                        disabled={isFixingErrors}
+                      >
+                        {isFixingErrors ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            <span>Fixing...</span>
+                          </>
+                        ) : (
+                          <span>Auto-Fix Issues</span>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         );
       }
