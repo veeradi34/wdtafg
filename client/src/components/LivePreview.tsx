@@ -30,20 +30,39 @@ export default function LivePreview({
   // Handle error messages from the iframe
   useEffect(() => {
     const handleIframeMessage = (event: MessageEvent) => {
-      if (event.data && (event.data.type === 'preview-error' || event.data.type === 'preview-console-error')) {
-        const errorPayload = event.data.payload;
+      if (event.data && (event.data.type === 'preview-error' || event.data.type === 'preview-console-error' || event.data.type === 'PREVIEW_ERROR')) {
         let errorMessage = '';
         
         if (event.data.type === 'preview-error') {
+          const errorPayload = event.data.payload;
           errorMessage = `Error: ${errorPayload.message} at line ${errorPayload.lineno}, column ${errorPayload.colno}`;
           if (errorPayload.stack) {
             errorMessage += `\nStack: ${errorPayload.stack}`;
           }
-        } else {
+        } else if (event.data.type === 'preview-console-error') {
+          const errorPayload = event.data.payload;
           errorMessage = `Console Error: ${errorPayload.join(' ')}`;
+        } else if (event.data.type === 'PREVIEW_ERROR') {
+          const errorPayload = event.data.error;
+          errorMessage = `Error: ${errorPayload.message}`;
+          if (errorPayload.source) {
+            errorMessage += ` in ${errorPayload.source}`;
+          }
+          if (errorPayload.line) {
+            errorMessage += ` at line ${errorPayload.line}, column ${errorPayload.column}`;
+          }
+          if (errorPayload.stack) {
+            errorMessage += `\nStack: ${errorPayload.stack}`;
+          }
         }
         
-        setPreviewErrors(prev => [...prev, errorMessage]);
+        // Only add unique errors to prevent duplication
+        setPreviewErrors(prev => {
+          if (!prev.includes(errorMessage)) {
+            return [...prev, errorMessage];
+          }
+          return prev;
+        });
         console.error('Preview error detected:', errorMessage);
       }
     };

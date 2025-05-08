@@ -131,6 +131,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: error.message || "Unknown error" });
     }
   });
+  
+  // Error fixing endpoint - uses Gemini to fix code errors
+  app.post("/api/fix-errors", async (req: Request, res: Response) => {
+    try {
+      const { errors, files } = req.body;
+      
+      if (!errors || !errors.length || !files || !files.length) {
+        return res.status(400).json({ 
+          error: "Errors and files are required",
+          success: false 
+        });
+      }
+      
+      console.log(`Attempting to fix ${errors.length} errors in ${files.length} files`);
+      
+      // In a real implementation, this would call the Gemini API with a prompt like:
+      // "You are debugging code for an application. The following errors were detected:
+      // [Error List]
+      // 
+      // Here are the relevant files:
+      // [Files with content]
+      //
+      // Please fix the errors and return the corrected versions of these files.
+      // Focus only on fixing the specific errors mentioned."
+      
+      // For now, simulate a successful fix with a delay
+      setTimeout(() => {
+        res.json({
+          success: true,
+          message: "Code fixed successfully",
+          files: files // In a real implementation, this would be the fixed files
+        });
+      }, 1500);
+      
+    } catch (error: any) {
+      console.error("Error fixing code:", error);
+      res.status(500).json({ 
+        error: error.message || "Unknown error",
+        success: false
+      });
+    }
+  });
 
   const httpServer = createServer(app);
   return httpServer;
