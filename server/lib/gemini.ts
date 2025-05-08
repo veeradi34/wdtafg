@@ -143,14 +143,84 @@ Output a valid JSON object with this structure:
     // Extract JSON from the response
     // This handles cases where the model might add surrounding markdown or text
     const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/) || text.match(/```([\s\S]*?)```/) || [null, text];
-    const jsonText = jsonMatch[1] || text;
+    let jsonText = jsonMatch[1] || text;
+    
+    // Clean up the JSON text to handle common issues
+    jsonText = jsonText.trim()
+      // Fix cases where single quotes are used instead of double quotes
+      .replace(/'/g, '"')
+      // Fix trailing commas in objects/arrays which are invalid in JSON
+      .replace(/,(\s*[\]}])/g, '$1')
+      // Fix missing commas between properties
+      .replace(/}(\s*){/g, '},{')
+      // Replace any "undefined" with null
+      .replace(/"undefined"/g, 'null')
+      // Make sure strings are properly quoted
+      .replace(/([{,]\s*)(\w+):/g, '$1"$2":')
+      // Fix cases where there are unquoted property values
+      .replace(/:\s*([a-zA-Z0-9_]+)(\s*[,}])/g, ':"$1"$2');
     
     try {
-      const parsedResponse = JSON.parse(jsonText.trim());
+      // First, try to parse the cleaned JSON
+      let parsedResponse;
+      try {
+        parsedResponse = JSON.parse(jsonText);
+      } catch (initialParseError: any) {
+        console.warn("Initial JSON parsing failed, attempting to fix:", initialParseError.message);
+        
+        // If that fails, try a more aggressive attempt to extract valid JSON
+        // Look for something that looks like the start of our expected JSON structure
+        const potentialJsonStart = jsonText.indexOf('{"files":');
+        if (potentialJsonStart >= 0) {
+          jsonText = jsonText.substring(potentialJsonStart);
+          
+          // Try to find a valid closing bracket
+          let bracketCount = 0;
+          let validEndIndex = jsonText.length;
+          
+          for (let i = 0; i < jsonText.length; i++) {
+            if (jsonText[i] === '{') bracketCount++;
+            if (jsonText[i] === '}') {
+              bracketCount--;
+              if (bracketCount === 0) {
+                validEndIndex = i + 1;
+                break;
+              }
+            }
+          }
+          
+          jsonText = jsonText.substring(0, validEndIndex);
+          
+          // Try parsing again
+          try {
+            parsedResponse = JSON.parse(jsonText);
+          } catch (secondParseError: any) {
+            // If we still can't parse it, throw the original error
+            throw initialParseError;
+          }
+        } else {
+          // If we can't find the start of a JSON structure, throw the original error
+          throw initialParseError;
+        }
+      }
+      
+      // Handle the case where the response is still not a valid format
+      if (!parsedResponse || typeof parsedResponse !== 'object') {
+        throw new Error("Invalid response format: expected an object");
+      }
       
       // Validate and sanitize the response
       if (!parsedResponse.files || !Array.isArray(parsedResponse.files)) {
-        throw new Error("Invalid response structure: missing files array");
+        // Create a minimal valid structure if files are missing
+        parsedResponse.files = [
+          {
+            name: "index.html",
+            path: "/index.html",
+            type: "file",
+            content: "<html><body><h1>Generation Error</h1><p>The API returned an incomplete response. Please try again.</p></body></html>",
+            language: "html"
+          }
+        ];
       }
 
       if (!parsedResponse.dependencies || typeof parsedResponse.dependencies !== 'object') {
@@ -317,15 +387,63 @@ Fix all errors while also significantly improving the visual design and user exp
 
     // Extract JSON from the response
     const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/) || text.match(/```([\s\S]*?)```/) || [null, text];
-    const jsonText = jsonMatch[1] || text;
+    let jsonText = jsonMatch[1] || text;
     
+    // Clean up the JSON text to handle common issues - same as in generateApp
+    jsonText = jsonText.trim()
+      .replace(/'/g, '"')
+      .replace(/,(\s*[\]}])/g, '$1')
+      .replace(/}(\s*){/g, '},{')
+      .replace(/"undefined"/g, 'null')
+      .replace(/([{,]\s*)(\w+):/g, '$1"$2":')
+      .replace(/:\s*([a-zA-Z0-9_]+)(\s*[,}])/g, ':"$1"$2');
+      
     try {
-      // Parse the response as JSON
-      const fixedResponse = JSON.parse(jsonText.trim());
+      // First, try to parse the cleaned JSON
+      let fixedResponse;
+      try {
+        fixedResponse = JSON.parse(jsonText);
+      } catch (initialParseError: any) {
+        console.warn("Initial JSON parsing failed in fix app, attempting to fix:", initialParseError.message);
+        
+        // If that fails, try a more aggressive approach
+        const potentialJsonStart = jsonText.indexOf('{"files":');
+        if (potentialJsonStart >= 0) {
+          jsonText = jsonText.substring(potentialJsonStart);
+          
+          // Try to find a valid closing bracket
+          let bracketCount = 0;
+          let validEndIndex = jsonText.length;
+          
+          for (let i = 0; i < jsonText.length; i++) {
+            if (jsonText[i] === '{') bracketCount++;
+            if (jsonText[i] === '}') {
+              bracketCount--;
+              if (bracketCount === 0) {
+                validEndIndex = i + 1;
+                break;
+              }
+            }
+          }
+          
+          jsonText = jsonText.substring(0, validEndIndex);
+          
+          // Try parsing again
+          try {
+            fixedResponse = JSON.parse(jsonText);
+          } catch (secondParseError: any) {
+            // If we still can't parse it, throw the original error
+            throw initialParseError;
+          }
+        } else {
+          // If we can't find the start of a JSON structure, throw the original error
+          throw initialParseError;
+        }
+      }
       
       // Validate the response structure
-      if (!fixedResponse.files || !Array.isArray(fixedResponse.files)) {
-        throw new Error("Invalid response structure: missing files array");
+      if (!fixedResponse || !fixedResponse.files || !Array.isArray(fixedResponse.files)) {
+        throw new Error("Invalid response structure: missing or invalid files array");
       }
       
       console.log(`Successfully fixed ${fixedResponse.files.length} files`);
