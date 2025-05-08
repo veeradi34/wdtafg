@@ -75,10 +75,14 @@ export default function LivePreview({
 
   // Update preview HTML when files change
   useEffect(() => {
-    if (isComplete && generatedFiles.length > 0) {
-      generatePreviewContent(generatedFiles);
-      // Reset errors when new content is generated
-      setPreviewErrors([]);
+    if (generatedFiles.length > 0) {
+      // If explicitly marked as complete, or if we have files with an index.html, proceed
+      // This makes the component resilient to API issues
+      if (isComplete || generatedFiles.some(file => file.name === "index.html")) {
+        generatePreviewContent(generatedFiles);
+        // Reset errors when new content is generated
+        setPreviewErrors([]);
+      }
     }
   }, [isComplete, generatedFiles]);
 

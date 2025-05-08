@@ -114,6 +114,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     reset, 
     isGenerating, 
     isComplete, 
+    setIsComplete, // Explicitly destructure setIsComplete 
     error 
   } = useAppGeneration({
     onSuccess: (data) => {
@@ -468,10 +469,8 @@ form button:hover {
     reset();
     
     // Directly set the application state to complete without making an API call
-    setTimeout(() => {
-      // Instead of calling the API, just update the state directly
-      setIsComplete(true);
-    }, 100);
+    setIsComplete(true);
+    setActiveTab("preview");
     
     toast({
       title: "Demo App Loaded",

@@ -68,6 +68,7 @@ export function useAppGeneration(options?: UseAppGenerationOptions) {
     reset,
     isGenerating,
     isComplete,
+    setIsComplete,  // Export the setter
     error,
     generatedApp
   };
