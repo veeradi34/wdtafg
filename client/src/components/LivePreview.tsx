@@ -494,7 +494,7 @@ export default function LivePreview({
                               const updatedFiles = [...generatedFiles];
                               
                               // Replace the fixed files in our array
-                              data.files.forEach(fixedFile => {
+                              data.files.forEach((fixedFile: FileNode) => {
                                 const index = updatedFiles.findIndex(file => 
                                   file.path === fixedFile.path || 
                                   (file.name === fixedFile.name && file.type === fixedFile.type)

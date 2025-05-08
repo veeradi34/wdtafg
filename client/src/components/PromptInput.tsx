@@ -7,6 +7,7 @@ interface PromptInputProps {
   onGenerate: (prompt: string) => void;
   onClear: () => void;
   onLoadExample: () => void;
+  onTestError?: () => void; // Optional function to test error handling
   isGenerating: boolean;
   prompt: string;
   setPrompt: (prompt: string) => void;
@@ -18,6 +19,7 @@ export default function PromptInput({
   onGenerate,
   onClear,
   onLoadExample,
+  onTestError,
   isGenerating,
   prompt,
   setPrompt,
@@ -98,6 +100,17 @@ export default function PromptInput({
           >
             Load Example
           </Button>
+          {onTestError && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onTestError}
+              disabled={isGenerating}
+              className="bg-red-50 hover:bg-red-100 text-red-500 border-red-200"
+            >
+              Test Error Fix
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"

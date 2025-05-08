@@ -223,10 +223,20 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     setActiveFile("index.html");
     setActiveTab("preview");
     
-    // Mark as complete so the preview will try to render
+    // Reset state and prepare to load test files
+    reset();
+    
+    // Mark as complete to show the preview
+    setTimeout(() => {
+      // We need to set this to simulate a complete generation
+      // This is just for testing the error detection
+      // @ts-ignore - we're intentionally bypassing type checking for the test
+      setIsComplete(true);
+    }, 100);
+    
     toast({
       title: "Error Test Loaded",
-      description: "Test app with intentional errors has been loaded. Check the preview.",
+      description: "Test app with intentional errors has been loaded. Check the preview tab for the error detection.",
     });
   };
 
@@ -252,6 +262,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             onGenerate={handleGenerate}
             onClear={handleClear}
             onLoadExample={handleLoadExample}
+            onTestError={handleLoadErrorTest}
             isGenerating={isGenerating}
             prompt={prompt}
             setPrompt={setPrompt}
