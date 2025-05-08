@@ -116,16 +116,38 @@ export default function LivePreview({
         file.content
       );
       
-      // Sort JS files to ensure app.js runs last
+      // Sort JS files to ensure proper execution order (utility files first, app.js last)
       jsFiles.sort((a, b) => {
-        if (a.name === "app.js") return 1;
-        if (b.name === "app.js") return -1;
+        // Priority ranking - lower index = earlier execution
+        const filePriority = ["utils.js", "helpers.js", "components.js", "main.js", "index.js", "app.js"];
+        
+        // Get the priority index for each file
+        const aIndex = filePriority.findIndex(name => a.name.endsWith(name));
+        const bIndex = filePriority.findIndex(name => b.name.endsWith(name));
+        
+        // If both files are in the priority list, sort by priority
+        if (aIndex >= 0 && bIndex >= 0) return aIndex - bIndex;
+        
+        // If only one file is in the priority list
+        if (aIndex >= 0) return -1; // a comes first
+        if (bIndex >= 0) return 1;  // b comes first
+        
+        // Otherwise sort alphabetically
         return a.name.localeCompare(b.name);
       });
       
-      // Concatenate all JS content in the sorted order
+      // Wrap each script in a try-catch for better error isolation
       jsFiles.forEach(file => {
-        jsContent += `// ${file.name}\n${file.content}\n\n`;
+        jsContent += `
+// BEGIN ${file.name}
+try {
+${file.content}
+} catch (error) {
+  console.error("Error in ${file.name}:", error);
+}
+// END ${file.name}
+
+`;
       });
       
       // Add CSS to HTML if needed
