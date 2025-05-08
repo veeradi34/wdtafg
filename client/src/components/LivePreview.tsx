@@ -105,14 +105,178 @@ export default function LivePreview({
     return searchFiles(files);
   };
 
-  // Helper function to render a calculator preview
+  // Helper function to render a calculator preview with functionality
   const renderCalculatorPreview = () => {
+    const [display, setDisplay] = useState<string>("0");
+    const [operation, setOperation] = useState<string | null>(null);
+    const [previousValue, setPreviousValue] = useState<number | null>(null);
+    const [waitingForOperand, setWaitingForOperand] = useState<boolean>(false);
+    const [equation, setEquation] = useState<string>("");
+
+    const clearAll = () => {
+      setDisplay("0");
+      setOperation(null);
+      setPreviousValue(null);
+      setWaitingForOperand(false);
+      setEquation("");
+    };
+
+    const inputDigit = (digit: string) => {
+      if (waitingForOperand) {
+        setDisplay(digit);
+        setWaitingForOperand(false);
+      } else {
+        setDisplay(display === "0" ? digit : display + digit);
+      }
+    };
+
+    const inputDecimal = () => {
+      if (waitingForOperand) {
+        setDisplay("0.");
+        setWaitingForOperand(false);
+      } else if (!display.includes(".")) {
+        setDisplay(display + ".");
+      }
+    };
+
+    const toggleSign = () => {
+      const value = parseFloat(display);
+      setDisplay((value * -1).toString());
+    };
+
+    const inputPercent = () => {
+      const value = parseFloat(display);
+      setDisplay((value / 100).toString());
+    };
+
+    const performOperation = (nextOperation: string) => {
+      const inputValue = parseFloat(display);
+      
+      if (previousValue === null) {
+        setPreviousValue(inputValue);
+        setEquation(`${inputValue} ${nextOperation}`);
+      } else if (operation) {
+        const currentValue = previousValue || 0;
+        let newValue = 0;
+        
+        switch (operation) {
+          case "+":
+            newValue = currentValue + inputValue;
+            break;
+          case "-":
+            newValue = currentValue - inputValue;
+            break;
+          case "×":
+            newValue = currentValue * inputValue;
+            break;
+          case "÷":
+            newValue = currentValue / inputValue;
+            break;
+        }
+
+        setPreviousValue(newValue);
+        setDisplay(newValue.toString());
+        setEquation(`${newValue} ${nextOperation}`);
+      }
+
+      setWaitingForOperand(true);
+      setOperation(nextOperation);
+    };
+
+    const handleEquals = () => {
+      if (!operation || previousValue === null) return;
+
+      const inputValue = parseFloat(display);
+      let newValue = 0;
+      
+      switch (operation) {
+        case "+":
+          newValue = previousValue + inputValue;
+          break;
+        case "-":
+          newValue = previousValue - inputValue;
+          break;
+        case "×":
+          newValue = previousValue * inputValue;
+          break;
+        case "÷":
+          newValue = previousValue / inputValue;
+          break;
+      }
+
+      setDisplay(newValue.toString());
+      setEquation(`${previousValue} ${operation} ${inputValue} =`);
+      setPreviousValue(null);
+      setOperation(null);
+      setWaitingForOperand(true);
+    };
+
+    const handleButtonClick = (btn: string) => {
+      switch (btn) {
+        case "C":
+          clearAll();
+          break;
+        case "±":
+          toggleSign();
+          break;
+        case "%":
+          inputPercent();
+          break;
+        case "÷":
+        case "×":
+        case "-":
+        case "+":
+          performOperation(btn);
+          break;
+        case "=":
+          handleEquals();
+          break;
+        case ".":
+          inputDecimal();
+          break;
+        default:
+          if (btn >= "0" && btn <= "9") {
+            inputDigit(btn);
+          }
+      }
+    };
+
+    // Format display to avoid overflow and handle decimal precision
+    const formattedDisplay = () => {
+      const num = parseFloat(display);
+      if (isNaN(num)) return display;
+      
+      // Handle large numbers
+      if (Math.abs(num) >= 1e10) {
+        return num.toExponential(6);
+      }
+      
+      // Handle decimal precision
+      const displayStr = display.toString();
+      if (displayStr.length > 12) {
+        if (displayStr.includes('.')) {
+          const decimalIndex = displayStr.indexOf('.');
+          const integerPart = displayStr.slice(0, decimalIndex);
+          const maxDecimalPlaces = Math.max(0, 10 - integerPart.length);
+          return num.toFixed(maxDecimalPlaces);
+        } else {
+          return num.toExponential(6);
+        }
+      }
+      
+      return displayStr;
+    };
+
     return (
       <div className="flex flex-col items-center justify-center h-full bg-gray-100 dark:bg-gray-800 p-4">
         <div className="bg-gray-900 rounded-xl overflow-hidden shadow-lg w-72">
           <div className="p-4 bg-gray-800">
-            <div className="text-right text-white text-3xl font-light mb-2">123.45</div>
-            <div className="text-right text-gray-400 text-sm">12 + 111.45</div>
+            <div className="text-right text-white text-3xl font-light mb-2 overflow-hidden text-ellipsis" style={{ minHeight: '40px' }}>
+              {formattedDisplay()}
+            </div>
+            <div className="text-right text-gray-400 text-sm overflow-hidden text-ellipsis">
+              {equation}
+            </div>
           </div>
           <div className="grid grid-cols-4 gap-1 p-2">
             {["C", "±", "%", "÷", 
@@ -128,8 +292,10 @@ export default function LivePreview({
                    ["÷", "×", "-", "+"].includes(btn) ? "bg-orange-700" :
                    ["C", "±", "%"].includes(btn) ? "bg-gray-600" : "bg-gray-700"}
                   ${btn === "0" ? "col-span-2" : ""}
-                  hover:opacity-80 transition-opacity
+                  hover:opacity-80 active:scale-95 transition-all
                 `}
+                onClick={() => btn && handleButtonClick(btn)}
+                disabled={!btn}
               >
                 {btn}
               </button>
