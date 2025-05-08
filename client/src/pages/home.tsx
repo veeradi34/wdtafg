@@ -18,6 +18,7 @@ import {
   FileNode, 
   Dependency 
 } from "@/lib/types";
+import { GeneratedApp } from "@shared/schema";
 
 export default function Home() {
   const { toast } = useToast();
@@ -115,7 +116,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     loadDemoApp,
     isGenerating, 
     isComplete, 
-    error 
+    error,
+    generatedApp
   } = useAppGeneration({
     onSuccess: (data) => {
       if (data.files) {
@@ -375,6 +377,11 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                 isError={!!error}
                 onRegenerateClick={() => handleGenerate(prompt)}
                 generatedFiles={files}
+                generatedApp={generatedApp || {
+                  files,
+                  dependencies: Object.fromEntries(dependencies.map(d => [d.name, d.version])),
+                  devDependencies: Object.fromEntries(devDependencies.map(d => [d.name, d.version])),
+                }}
               />
             ) : activeTab === "dependencies" ? (
               <DependenciesView
