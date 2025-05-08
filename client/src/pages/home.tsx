@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import { Download, Share } from "lucide-react";
+import { Download, Share, AlertCircle, Loader2 } from "lucide-react";
 import AppHeader from "@/components/AppHeader";
 import AppFooter from "@/components/AppFooter";
 import PromptInput from "@/components/PromptInput";
@@ -182,10 +182,10 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     setPrompt("Build me a React dashboard with a data table and chart for tracking sales data. Include filtering and sorting capabilities.");
   };
   
-  // Test function to load our error test app
+  // Test function to load our error test app with more realistic scenarios
   const handleLoadErrorTest = () => {
-    // Load our test files with intentional errors
-    const testFiles: FileNode[] = [
+    // Load our test files with intentional errors for various scenarios
+    const newTestFiles: FileNode[] = [
       {
         name: "index.html",
         path: "/index.html",
@@ -196,30 +196,237 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Test Error App</title>
+  <title>ZeroCode Demo App</title>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div id="app">Loading...</div>
-  <script>
-    // Intentional error - Using undeclared variable
-    document.addEventListener('DOMContentLoaded', function() {
-      const app = document.getElementById('app');
-      
-      // Error: using 'message' without declaring it
-      app.innerHTML = message;
-      
-      // This would be the correct code:
-      // const message = "Hello World!";
-      // app.innerHTML = message;
-    });
-  </script>
+  <div id="root"></div>
+  <script src="app.js"></script>
 </body>
 </html>`
+      },
+      {
+        name: "app.js",
+        path: "/app.js",
+        type: "file",
+        language: "javascript",
+        content: `// Main application file with several common errors
+document.addEventListener('DOMContentLoaded', function() {
+  const root = document.getElementById('root');
+  const todoApp = new TodoApp();
+  todoApp.render(root);
+});
+
+// TodoApp class with errors
+class TodoApp {
+  constructor() {
+    this.todos = [];
+    this.nextId = 1;
+    
+    // Error 1: Missing event argument in event handler
+    this.handleSubmit = function() {
+      event.preventDefault(); // ReferenceError: event is not defined
+      this.addTodo(this.inputValue);
+    }
+    
+    // Error 2: Undefined property
+    this.inputValue = this.getInputValue();
+  }
+  
+  // Error 3: Method implementation missing
+  getInputValue() {
+    // Method left unimplemented
+    return this.inputElement.value; // TypeError: Cannot read properties of undefined
+  }
+  
+  // Error 4: Incorrect array method
+  addTodo(text) {
+    if (!text) return;
+    
+    this.todos.push({
+      id: this.nextId++,
+      text: text,
+      completed: false
+    });
+    
+    // Error: Using non-existent array method
+    const incompleteTodos = this.todos.whereNot(todo => todo.completed);
+    this.renderTodos();
+  }
+  
+  render(container) {
+    // Create app UI
+    const appContainer = document.createElement('div');
+    appContainer.className = 'todo-app';
+    
+    // Add heading
+    const heading = document.createElement('h1');
+    heading.textContent = 'Todo App';
+    appContainer.appendChild(heading);
+    
+    // Create form
+    const form = document.createElement('form');
+    form.addEventListener('submit', this.handleSubmit);
+    
+    // Create input
+    this.inputElement = document.createElement('input');
+    this.inputElement.type = 'text';
+    this.inputElement.placeholder = 'Add a new todo...';
+    form.appendChild(this.inputElement);
+    
+    // Create submit button
+    const submitButton = document.createElement('button');
+    submitButton.type = 'submit';
+    submitButton.textContent = 'Add';
+    form.appendChild(submitButton);
+    
+    appContainer.appendChild(form);
+    
+    // Create todos container
+    this.todosContainer = document.createElement('ul');
+    this.todosContainer.className = 'todos-list';
+    appContainer.appendChild(this.todosContainer);
+    
+    container.appendChild(appContainer);
+    
+    // Initial render
+    this.renderTodos();
+  }
+  
+  renderTodos() {
+    // Error 5: Missing null check
+    this.todosContainer.innerHTML = '';
+    
+    this.todos.forEach(todo => {
+      const todoItem = document.createElement('li');
+      todoItem.className = todo.completed ? 'todo-item completed' : 'todo-item';
+      
+      const todoText = document.createElement('span');
+      todoText.textContent = todo.text;
+      todoItem.appendChild(todoText);
+      
+      // Create toggle button
+      const toggleButton = document.createElement('button');
+      toggleButton.textContent = todo.completed ? 'Undo' : 'Complete';
+      toggleButton.addEventListener('click', () => {
+        this.toggleTodo(todo.id);
+      });
+      todoItem.appendChild(toggleButton);
+      
+      // Create delete button
+      const deleteButton = document.createElement('button');
+      deleteButton.textContent = 'Delete';
+      deleteButton.addEventListener('click', () => {
+        this.deleteTodo(todo.id);
+      });
+      todoItem.appendChild(deleteButton);
+      
+      this.todosContainer.appendChild(todoItem);
+    });
+  }
+  
+  toggleTodo(id) {
+    const todo = this.todos.find(todo => todo.id === id);
+    if (todo) {
+      todo.completed = !todo.completed;
+      this.renderTodos();
+    }
+  }
+  
+  deleteTodo(id) {
+    this.todos = this.todos.filter(todo => todo.id !== id);
+    this.renderTodos();
+  }
+}`
+      },
+      {
+        name: "styles.css",
+        path: "/styles.css",
+        type: "file",
+        language: "css",
+        content: `.todo-app {
+  font-family: Arial, sans-serif;
+  max-width: 500px;
+  margin: 0 auto;
+  padding: 20px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+}
+
+h1 {
+  text-align: center;
+  color: #333;
+}
+
+form {
+  display: flex;
+  margin-bottom: 20px;
+}
+
+input {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px 0 0 4px;
+  font-size: 16px;
+}
+
+form button {
+  padding: 10px 15px;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 0 4px 4px 0;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+form button:hover {
+  background-color: #45a049;
+}
+
+.todos-list {
+  list-style-type: none;
+  padding: 0;
+}
+
+.todo-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  margin-bottom: 10px;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+}
+
+.todo-item.completed span {
+  text-decoration: line-through;
+  color: #888;
+}
+
+.todo-item button {
+  margin-left: 10px;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.todo-item button:first-of-type {
+  background-color: #2196F3;
+  color: white;
+}
+
+.todo-item button:last-child {
+  background-color: #f44336;
+  color: white;
+}`
       }
     ];
     
     // Replace the current files with our test files
-    setFiles(testFiles);
+    setFiles(newTestFiles);
     setActiveFile("index.html");
     setActiveTab("preview");
     
