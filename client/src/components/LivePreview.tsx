@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { RefreshCw, Smartphone, Tablet, Monitor, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { PreviewSizeType } from "@/lib/types";
+import { PreviewSizeType, FileNode } from "@/lib/types";
 import { Loader2, AlertCircle } from "lucide-react";
 
 interface LivePreviewProps {
@@ -9,6 +9,7 @@ interface LivePreviewProps {
   isComplete: boolean;
   isError: boolean;
   onRegenerateClick: () => void;
+  generatedFiles?: FileNode[];
 }
 
 export default function LivePreview({
@@ -16,159 +17,161 @@ export default function LivePreview({
   isComplete,
   isError,
   onRegenerateClick,
+  generatedFiles = [],
 }: LivePreviewProps) {
   const [previewSize, setPreviewSize] = useState<PreviewSizeType>("desktop");
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [previewHtml, setPreviewHtml] = useState<string>("");
 
-  // Mock dashboard content for preview
-  const MockDashboard = () => (
-    <div className="h-full flex flex-col">
-      {/* Header */}
-      <header className="bg-primary-600 text-white p-4 flex items-center justify-between">
-        <h1 className="text-xl font-bold">Sales Dashboard</h1>
-        <div className="flex items-center space-x-4">
-          <button className="p-2 hover:bg-primary-700 rounded-full">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-            </svg>
-          </button>
-          <button className="p-2 hover:bg-primary-700 rounded-full">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-            </svg>
-          </button>
-        </div>
-      </header>
+  // Update preview HTML when files change
+  useEffect(() => {
+    if (isComplete && generatedFiles.length > 0) {
+      generatePreviewContent(generatedFiles);
+    }
+  }, [isComplete, generatedFiles]);
+
+  // Function to extract HTML, CSS, and JS from generated files
+  const generatePreviewContent = (files: FileNode[]) => {
+    try {
+      // Find HTML files
+      let htmlContent = findFileContent(files, ".html") || 
+                       `<!DOCTYPE html>
+                        <html>
+                          <head>
+                            <meta charset="UTF-8">
+                            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                            <title>Preview</title>
+                            <style id="inject-css"></style>
+                          </head>
+                          <body>
+                            <div id="app"></div>
+                            <script id="inject-js"></script>
+                          </body>
+                        </html>`;
+                        
+      // Find CSS files
+      const cssContent = findFileContent(files, ".css") || "";
       
-      {/* Dashboard content */}
-      <main className="flex-1 p-4 overflow-auto">
-        {/* Summary cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
-            <div className="flex items-center justify-between">
-              <h3 className="text-gray-500 dark:text-gray-400 text-sm font-medium">Total Sales</h3>
-              <span className="text-green-500 text-xs font-semibold">+12.5%</span>
-            </div>
-            <p className="text-2xl font-bold mt-1">$12,890</p>
+      // Find JS files
+      const jsContent = findFileContent(files, ".js") || 
+                        findFileContent(files, ".jsx") || 
+                        findFileContent(files, ".ts") || 
+                        findFileContent(files, ".tsx") || "";
+
+      // Insert CSS and JS into HTML
+      let finalHtml = htmlContent;
+      
+      // If HTML doesn't contain CSS or JS tags, inject them
+      if (!finalHtml.includes("<style") && cssContent) {
+        finalHtml = finalHtml.replace("</head>", `<style>${cssContent}</style></head>`);
+      }
+      
+      if (!finalHtml.includes("<script") && jsContent) {
+        finalHtml = finalHtml.replace("</body>", `<script>${jsContent}</script></body>`);
+      }
+      
+      setPreviewHtml(finalHtml);
+      
+      // Update iframe if it exists
+      if (iframeRef.current) {
+        const iframeDoc = iframeRef.current.contentDocument;
+        if (iframeDoc) {
+          iframeDoc.open();
+          iframeDoc.write(finalHtml);
+          iframeDoc.close();
+        }
+      }
+    } catch (error) {
+      console.error("Error generating preview content:", error);
+    }
+  };
+
+  // Helper function to find file content by extension
+  const findFileContent = (files: FileNode[], extension: string): string | null => {
+    // Recursively search through files
+    const searchFiles = (nodes: FileNode[]): string | null => {
+      for (const node of nodes) {
+        if (node.type === "file" && node.name.endsWith(extension) && node.content) {
+          return node.content;
+        }
+        if (node.type === "folder" && node.children) {
+          const result = searchFiles(node.children);
+          if (result) return result;
+        }
+      }
+      return null;
+    };
+    
+    return searchFiles(files);
+  };
+
+  // Helper function to render a calculator preview
+  const renderCalculatorPreview = () => {
+    return (
+      <div className="flex flex-col items-center justify-center h-full bg-gray-100 dark:bg-gray-800 p-4">
+        <div className="bg-gray-900 rounded-xl overflow-hidden shadow-lg w-72">
+          <div className="p-4 bg-gray-800">
+            <div className="text-right text-white text-3xl font-light mb-2">123.45</div>
+            <div className="text-right text-gray-400 text-sm">12 + 111.45</div>
           </div>
-          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
-            <div className="flex items-center justify-between">
-              <h3 className="text-gray-500 dark:text-gray-400 text-sm font-medium">New Customers</h3>
-              <span className="text-green-500 text-xs font-semibold">+5.8%</span>
-            </div>
-            <p className="text-2xl font-bold mt-1">128</p>
-          </div>
-          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
-            <div className="flex items-center justify-between">
-              <h3 className="text-gray-500 dark:text-gray-400 text-sm font-medium">Avg. Order Value</h3>
-              <span className="text-red-500 text-xs font-semibold">-2.3%</span>
-            </div>
-            <p className="text-2xl font-bold mt-1">$124.30</p>
-          </div>
-        </div>
-        
-        {/* Chart */}
-        <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow mb-6">
-          <h2 className="text-lg font-medium mb-4">Sales Trend</h2>
-          <div className="h-64 w-full">
-            {/* Placeholder for chart */}
-            <div className="w-full h-full flex items-end justify-between space-x-2 p-4 border-b border-l border-gray-300 dark:border-gray-700">
-              <div className="h-[20%] w-8 bg-primary-500 rounded-t"></div>
-              <div className="h-[35%] w-8 bg-primary-500 rounded-t"></div>
-              <div className="h-[45%] w-8 bg-primary-500 rounded-t"></div>
-              <div className="h-[30%] w-8 bg-primary-500 rounded-t"></div>
-              <div className="h-[60%] w-8 bg-primary-500 rounded-t"></div>
-              <div className="h-[80%] w-8 bg-primary-500 rounded-t"></div>
-            </div>
-            <div className="flex justify-between px-4 pt-2 text-xs text-gray-500">
-              <span>Jan</span>
-              <span>Feb</span>
-              <span>Mar</span>
-              <span>Apr</span>
-              <span>May</span>
-              <span>Jun</span>
-            </div>
-          </div>
-        </div>
-        
-        {/* Data table */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
-          <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-            <h2 className="text-lg font-medium">Top Products</h2>
-            <button className="text-sm text-primary-600 dark:text-primary-400 hover:underline">View All</button>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-              <thead className="bg-gray-50 dark:bg-gray-900">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Product</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Sales</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Revenue</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                <tr>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="h-10 w-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-500">WA</div>
-                      <div className="ml-4">
-                        <div className="text-sm font-medium">Widget A</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">123</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">$1,230</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                      Active
-                    </span>
-                  </td>
-                </tr>
-                <tr>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="h-10 w-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-500">WB</div>
-                      <div className="ml-4">
-                        <div className="text-sm font-medium">Widget B</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">456</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">$4,560</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                      Active
-                    </span>
-                  </td>
-                </tr>
-                <tr>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="h-10 w-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-500">WC</div>
-                      <div className="ml-4">
-                        <div className="text-sm font-medium">Widget C</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">789</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">$7,890</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                      Low Stock
-                    </span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <div className="grid grid-cols-4 gap-1 p-2">
+            {["C", "±", "%", "÷", 
+              "7", "8", "9", "×", 
+              "4", "5", "6", "-", 
+              "1", "2", "3", "+", 
+              "0", "", ".", "="].map((btn, i) => (
+              <button 
+                key={i} 
+                className={`
+                  p-2 rounded text-xl text-white text-center
+                  ${btn === "=" ? "bg-orange-500" : 
+                   ["÷", "×", "-", "+"].includes(btn) ? "bg-orange-700" :
+                   ["C", "±", "%"].includes(btn) ? "bg-gray-600" : "bg-gray-700"}
+                  ${btn === "0" ? "col-span-2" : ""}
+                  hover:opacity-80 transition-opacity
+                `}
+              >
+                {btn}
+              </button>
+            ))}
           </div>
         </div>
-      </main>
-    </div>
-  );
+      </div>
+    );
+  };
 
   const renderPreviewContent = () => {
-    if (isComplete) {
-      return <MockDashboard />;
+    if (isComplete && generatedFiles.length > 0) {
+      // Check if this is a calculator app
+      const isCalculator = generatedFiles.some(file => 
+        file.content && 
+        (file.content.includes("calculator") || 
+         file.content.includes("Calculator") ||
+         file.content.includes("math.") ||
+         file.content.includes("Math.") ||
+         file.content.includes("add(") ||
+         file.content.includes("subtract(") ||
+         file.content.includes("multiply(") ||
+         file.content.includes("divide("))
+      );
+      
+      // Show calculator-specific preview if it's a calculator app
+      if (isCalculator) {
+        return renderCalculatorPreview();
+      }
+      
+      // Show the iframe with the generated content
+      return (
+        <div className="h-full w-full">
+          <iframe
+            ref={iframeRef}
+            title="Live Preview"
+            sandbox="allow-scripts"
+            className="h-full w-full border-0"
+            srcDoc={previewHtml}
+          />
+        </div>
+      );
     }
 
     if (isError) {

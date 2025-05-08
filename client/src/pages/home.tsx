@@ -306,6 +306,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                 isGenerating={isGenerating}
                 isComplete={isComplete}
                 isError={!!error}
+                generatedFiles={files}
                 onRegenerateClick={() => {
                   if (prompt) {
                     generateApp(prompt, projectSettings);
