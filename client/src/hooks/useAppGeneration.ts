@@ -47,10 +47,11 @@ export function useAppGeneration(options?: UseAppGenerationOptions) {
       setGeneratedApp(data);
       setIsComplete(true);
       options?.onSuccess?.(data);
-    } catch (error) {
-      console.error("Error generating app:", error);
-      setError(error.message || "Failed to generate application");
-      options?.onError?.(error);
+    } catch (err) {
+      console.error("Error generating app:", err);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setError(errorMessage || "Failed to generate application");
+      options?.onError?.(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setIsGenerating(false);
     }

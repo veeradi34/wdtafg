@@ -185,14 +185,15 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   
   // Function to load our fixed test app for demonstration
   const handleLoadErrorTest = () => {
-    // Load our corrected test files for the todo app
-    const newTestFiles: FileNode[] = [
-      {
-        name: "index.html",
-        path: "/index.html",
-        type: "file",
-        language: "html",
-        content: `<!DOCTYPE html>
+    // Create a mock success response for the demo app
+    const mockSuccessResponse = {
+      files: [
+        {
+          name: "index.html",
+          path: "/index.html",
+          type: "file" as "file",
+          language: "html",
+          content: `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -205,13 +206,13 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   <script src="app.js"></script>
 </body>
 </html>`
-      },
-      {
-        name: "app.js",
-        path: "/app.js",
-        type: "file",
-        language: "javascript",
-        content: `// Main application file
+        },
+        {
+          name: "app.js",
+          path: "/app.js",
+          type: "file" as "file",
+          language: "javascript",
+          content: `// Main application file
 document.addEventListener('DOMContentLoaded', function() {
   const root = document.getElementById('root');
   const todoApp = new TodoApp();
@@ -343,13 +344,13 @@ class TodoApp {
     this.renderTodos();
   }
 }`
-      },
-      {
-        name: "styles.css",
-        path: "/styles.css",
-        type: "file",
-        language: "css",
-        content: `.todo-app {
+        },
+        {
+          name: "styles.css",
+          path: "/styles.css",
+          type: "file" as "file",
+          language: "css",
+          content: `.todo-app {
   font-family: Arial, sans-serif;
   max-width: 500px;
   margin: 0 auto;
@@ -457,20 +458,61 @@ form button:hover {
 .todo-item button:last-child:hover {
   background-color: #d32f2f;
 }`
+        }
+      ],
+      dependencies: {
+        "react": "^18.2.0",
+        "react-dom": "^18.2.0"
+      },
+      devDependencies: {
+        "vite": "^4.3.0",
+        "@vitejs/plugin-react": "^3.1.0"
       }
-    ];
+    };
     
-    // Replace the current files with our test files
-    setFiles(newTestFiles);
-    setActiveFile("index.html");
-    setActiveTab("preview");
-    
-    // Reset state and prepare to load test files
+    // Reset state
     reset();
     
-    // Directly set the application state to complete without making an API call
+    // Update state with our mock data
+    if (mockSuccessResponse.files) {
+      // Cast the files array to the correct type
+      const typedFiles = mockSuccessResponse.files.map(file => ({
+        ...file,
+        type: file.type as "file" | "folder"
+      }));
+      setFiles(typedFiles);
+      setActiveFile("index.html");
+      setActiveTab("preview");
+    }
+    
+    // Process dependencies from mock data
+    const mainDeps: Dependency[] = [];
+    const devDeps: Dependency[] = [];
+    
+    if (mockSuccessResponse.dependencies) {
+      Object.entries(mockSuccessResponse.dependencies).forEach(([name, version]) => {
+        let category: Dependency["category"] = "Utility";
+        if (name === "react" || name === "react-dom") category = "Core";
+        else if (name.includes("router")) category = "Routing";
+        
+        mainDeps.push({ name, version: version.toString(), category });
+      });
+    }
+    
+    if (mockSuccessResponse.devDependencies) {
+      Object.entries(mockSuccessResponse.devDependencies).forEach(([name, version]) => {
+        let category: Dependency["category"] = "Utility";
+        if (name.includes("vite")) category = "Build Tool";
+        
+        devDeps.push({ name, version: version.toString(), category });
+      });
+    }
+    
+    setDependencies(mainDeps);
+    setDevDependencies(devDeps);
+    
+    // Directly set isComplete to true to simulate a successful generation
     setIsComplete(true);
-    setActiveTab("preview");
     
     toast({
       title: "Demo App Loaded",
