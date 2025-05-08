@@ -204,3 +204,125 @@ export async function testGeminiAPI(): Promise<string> {
     return `Gemini API test failed: ${error.message || "Unknown error"}`;
   }
 }
+
+// Function to fix errors in generated code using Gemini
+export async function fixAppErrors(errors: string[], files: FileNode[]): Promise<{ 
+  success: boolean; 
+  files?: FileNode[]; 
+  error?: string 
+}> {
+  try {
+    // Get the Gemini model
+    const model = geminiAPI.getGenerativeModel({ model: MODEL });
+
+    // Build a prompt that explains the errors and provides the files
+    let prompt = `You are a code error fixing expert. The following JavaScript/TypeScript application has errors:
+
+ERRORS DETECTED:
+${errors.map((error, i) => `${i+1}. ${error}`).join('\n')}
+
+FILES WITH POTENTIAL ISSUES:
+`;
+
+    // Add the files content to the prompt
+    const relevantFiles = files.filter(f => f.type === "file" && f.content);
+    relevantFiles.forEach(file => {
+      prompt += `\n--- File: ${file.path} ---\n${file.content}\n`;
+    });
+
+    prompt += `
+INSTRUCTIONS:
+1. Analyze the errors and find their root causes.
+2. Fix the code in the affected files.
+3. Return ONLY the fixed files as a JSON object in exactly this format:
+{
+  "files": [
+    {
+      "path": "file_path",
+      "content": "fixed_file_content",
+      "type": "file",
+      "name": "filename"
+    }
+  ]
+}
+
+Do not include any explanations, markdown formatting, or text outside of this JSON structure.
+Only fix the actual errors - do not rewrite or redesign the entire application.
+`;
+
+    // Add retry logic for rate limit handling
+    let retries = 0;
+    const maxRetries = 3;
+    let result;
+    
+    while (retries < maxRetries) {
+      try {
+        result = await model.generateContent({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.2,
+            maxOutputTokens: 8192,
+          }
+        });
+        break; // If successful, exit the retry loop
+      } catch (err: any) {
+        // Check if it's a rate limit error (429)
+        if (err.message && err.message.includes('429') && retries < maxRetries - 1) {
+          retries++;
+          console.log(`Rate limit hit when fixing errors, retrying (${retries}/${maxRetries})...`);
+          
+          // Wait with exponential backoff (1s, 2s, 4s, etc.)
+          const delay = 1000 * Math.pow(2, retries - 1);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        
+        // For other errors or if we've exhausted retries, rethrow
+        throw err;
+      }
+    }
+    
+    if (!result) {
+      throw new Error("Failed to fix errors after multiple attempts");
+    }
+
+    const response = result.response;
+    const text = response.text();
+
+    // Extract JSON from the response
+    const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/) || text.match(/```([\s\S]*?)```/) || [null, text];
+    const jsonText = jsonMatch[1] || text;
+    
+    try {
+      // Parse the response as JSON
+      const fixedResponse = JSON.parse(jsonText.trim());
+      
+      // Validate the response structure
+      if (!fixedResponse.files || !Array.isArray(fixedResponse.files)) {
+        throw new Error("Invalid response structure: missing files array");
+      }
+      
+      console.log(`Successfully fixed ${fixedResponse.files.length} files`);
+      
+      // Return the fixed files
+      return {
+        success: true,
+        files: fixedResponse.files
+      };
+    } catch (parseError: any) {
+      console.error("Error parsing Gemini fix response:", parseError, "Response was:", text.substring(0, 200) + "...");
+      return {
+        success: false,
+        error: `Failed to parse Gemini response: ${parseError.message}`,
+        files: files // Return the original files
+      };
+    }
+  } catch (error: any) {
+    console.error("Error fixing application with Gemini:", error);
+    return {
+      success: false,
+      error: `Failed to fix application: ${error.message || "Unknown error"}`,
+      files: files // Return the original files
+    };
+  }
+}

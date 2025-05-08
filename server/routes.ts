@@ -146,25 +146,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`Attempting to fix ${errors.length} errors in ${files.length} files`);
       
-      // In a real implementation, this would call the Gemini API with a prompt like:
-      // "You are debugging code for an application. The following errors were detected:
-      // [Error List]
-      // 
-      // Here are the relevant files:
-      // [Files with content]
-      //
-      // Please fix the errors and return the corrected versions of these files.
-      // Focus only on fixing the specific errors mentioned."
+      // Call the Gemini API to fix the errors
+      const { fixAppErrors } = await import("./lib/gemini");
+      const result = await fixAppErrors(errors, files);
       
-      // For now, simulate a successful fix with a delay
-      setTimeout(() => {
+      if (result.success) {
         res.json({
           success: true,
           message: "Code fixed successfully",
-          files: files // In a real implementation, this would be the fixed files
+          files: result.files
         });
-      }, 1500);
-      
+      } else {
+        res.status(500).json({
+          success: false,
+          error: result.error || "Unknown error fixing code",
+          files: files // Return original files if fixing failed
+        });
+      }
     } catch (error: any) {
       console.error("Error fixing code:", error);
       res.status(500).json({ 

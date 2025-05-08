@@ -487,30 +487,51 @@ export default function LivePreview({
                           })
                           .then(response => response.json())
                           .then(data => {
-                            if (data.success) {
-                              // Would update the files here in a real implementation
-                              console.log("Fixed files:", data.files);
+                            if (data.success && data.files) {
+                              console.log("Received fixed files:", data.files.length);
+                              
+                              // Create a copy of the current files array
+                              const updatedFiles = [...generatedFiles];
+                              
+                              // Replace the fixed files in our array
+                              data.files.forEach(fixedFile => {
+                                const index = updatedFiles.findIndex(file => 
+                                  file.path === fixedFile.path || 
+                                  (file.name === fixedFile.name && file.type === fixedFile.type)
+                                );
+                                
+                                if (index !== -1) {
+                                  // Replace the file with the fixed version
+                                  updatedFiles[index] = {
+                                    ...updatedFiles[index],
+                                    content: fixedFile.content
+                                  };
+                                  console.log(`Updated file: ${fixedFile.path || fixedFile.name}`);
+                                } else {
+                                  // New file, add it to the array
+                                  updatedFiles.push(fixedFile);
+                                  console.log(`Added new file: ${fixedFile.path || fixedFile.name}`);
+                                }
+                              });
                               
                               // Reset error state
                               setPreviewErrors([]);
-                              setIsFixingErrors(false);
                               
                               // Regenerate the preview with fixed files
-                              // In a real implementation, would call generatePreviewContent with the updated files
+                              generatePreviewContent(updatedFiles);
+                              
+                              // If onRegenerateClick is provided, call it to update the parent component
+                              if (onRegenerateClick) {
+                                onRegenerateClick();
+                              }
                             } else {
                               console.error("Error fixing files:", data.error);
-                              setIsFixingErrors(false);
                             }
+                            setIsFixingErrors(false);
                           })
                           .catch(error => {
                             console.error("Error sending fix request:", error);
                             setIsFixingErrors(false);
-                            
-                            // For demo purposes: simulate success after a short delay
-                            setTimeout(() => {
-                              setPreviewErrors([]);
-                              setIsFixingErrors(false);
-                            }, 2000);
                           });
                         }}
                         disabled={isFixingErrors}
