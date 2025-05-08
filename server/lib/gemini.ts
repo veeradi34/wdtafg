@@ -193,32 +193,69 @@ Ensure your JSON is properly formatted and can be parsed by JSON.parse().`;
       } catch (initialParseError: any) {
         console.warn("Initial JSON parsing failed, attempting to fix:", initialParseError.message);
         
-        // Check for the specific "position 98" error that we're seeing
-        if (initialParseError.message.includes("position 98")) {
-          console.log("Detected position 98 error, applying targeted fix...");
+        // Check for the specific position errors that we frequently see
+        const positionMatches = initialParseError.message.match(/position (\d+)/);
+        if (positionMatches && positionMatches[1]) {
+          const errorPosition = parseInt(positionMatches[1]);
+          console.log(`Detected position ${errorPosition} error, applying targeted fix...`);
           
-          // Inspect the problem area
-          const problematicArea = jsonText.substring(90, 110);
-          console.log("Text around position 98:", problematicArea);
+          // Inspect the problem area (5 chars before and 15 after)
+          const startIndex = Math.max(0, errorPosition - 5);
+          const endIndex = Math.min(jsonText.length, errorPosition + 15);
+          const problematicArea = jsonText.substring(startIndex, endIndex);
+          console.log(`Text around position ${errorPosition}:`, problematicArea);
           
-          // Try adding a missing comma at position 98
-          const fixedText = jsonText.substring(0, 98) + "," + jsonText.substring(98);
+          // Common fixes for position errors (including pos 91 and pos 98)
+          
+          // 1. Try adding a missing quote (common with unterminated strings)
+          const quoteFixedText = jsonText.substring(0, errorPosition) + '"' + jsonText.substring(errorPosition);
           try {
-            parsedResponse = JSON.parse(fixedText);
-            console.log("Position 98 fix successful!");
-            // If this works, we're done
-            jsonText = fixedText; // Update jsonText for further processing if needed
-          } catch (commaFixError) {
-            console.log("Comma fix did not work, trying alternative approaches");
+            parsedResponse = JSON.parse(quoteFixedText);
+            console.log("Quote fix successful!");
+            jsonText = quoteFixedText;
+          } catch (quoteFixError) {
+            console.log("Quote fix did not work, trying alternative approaches");
             
-            // Try fixing possible missing quotes around a value
-            const fixedText2 = jsonText.substring(0, 98) + '"' + jsonText.substring(98);
+            // 2. Try adding a missing comma
+            const commaFixedText = jsonText.substring(0, errorPosition) + "," + jsonText.substring(errorPosition);
             try {
-              parsedResponse = JSON.parse(fixedText2);
-              console.log("Quote fix successful!");
-              jsonText = fixedText2;
-            } catch (quoteFixError) {
-              console.log("Quote fix did not work either, falling back to general fixes");
+              parsedResponse = JSON.parse(commaFixedText);
+              console.log("Comma fix successful!");
+              jsonText = commaFixedText;
+            } catch (commaFixError) {
+              console.log("Comma fix did not work either");
+              
+              // 3. Check for unclosed quotes before the error position
+              let quotesBeforeError = 0;
+              for (let i = 0; i < errorPosition; i++) {
+                // Count unescaped quotes
+                if (jsonText[i] === '"' && (i === 0 || jsonText[i-1] !== '\\')) {
+                  quotesBeforeError++;
+                }
+              }
+              
+              if (quotesBeforeError % 2 !== 0) {
+                console.log("Detected unclosed quote before the error position");
+                
+                // Find a good place to close the string - look for comma, bracket or brace after position
+                let closingPos = errorPosition;
+                for (let i = errorPosition; i < Math.min(errorPosition + 20, jsonText.length); i++) {
+                  if ([',', '}', ']'].includes(jsonText[i])) {
+                    closingPos = i;
+                    break;
+                  }
+                }
+                
+                // Insert closing quote before that position
+                const balancedText = jsonText.substring(0, closingPos) + '"' + jsonText.substring(closingPos);
+                try {
+                  parsedResponse = JSON.parse(balancedText);
+                  console.log("String balancing fix successful!");
+                  jsonText = balancedText;
+                } catch (balanceFixError) {
+                  console.log("String balancing fix did not work, falling back to general fixes");
+                }
+              }
             }
           }
         }
