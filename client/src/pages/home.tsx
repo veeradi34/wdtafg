@@ -181,6 +181,54 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   const handleLoadExample = () => {
     setPrompt("Build me a React dashboard with a data table and chart for tracking sales data. Include filtering and sorting capabilities.");
   };
+  
+  // Test function to load our error test app
+  const handleLoadErrorTest = () => {
+    // Load our test files with intentional errors
+    const testFiles: FileNode[] = [
+      {
+        name: "index.html",
+        path: "/index.html",
+        type: "file",
+        language: "html",
+        content: `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test Error App</title>
+</head>
+<body>
+  <div id="app">Loading...</div>
+  <script>
+    // Intentional error - Using undeclared variable
+    document.addEventListener('DOMContentLoaded', function() {
+      const app = document.getElementById('app');
+      
+      // Error: using 'message' without declaring it
+      app.innerHTML = message;
+      
+      // This would be the correct code:
+      // const message = "Hello World!";
+      // app.innerHTML = message;
+    });
+  </script>
+</body>
+</html>`
+      }
+    ];
+    
+    // Replace the current files with our test files
+    setFiles(testFiles);
+    setActiveFile("index.html");
+    setActiveTab("preview");
+    
+    // Mark as complete so the preview will try to render
+    toast({
+      title: "Error Test Loaded",
+      description: "Test app with intentional errors has been loaded. Check the preview.",
+    });
+  };
 
   const downloadZip = () => {
     toast({
