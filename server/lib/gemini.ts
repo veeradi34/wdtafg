@@ -1,8 +1,16 @@
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { FileNode, GeneratedApp, CreativityMetrics } from "@shared/schema";
+import dotenv from 'dotenv';
+
+// Load environment variables
+dotenv.config();
+
+if (!process.env.GOOGLE_API_KEY) {
+  throw new Error('GOOGLE_API_KEY is required in environment variables');
+}
 
 // Initialize Google Generative AI with API key
-const geminiAPI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+const geminiAPI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 
 // Using a less resource-intensive model that has higher quota limits
 // This will help avoid rate limiting issues on the free tier
@@ -30,7 +38,6 @@ export async function generateApp({
   buildTool
 }: GenerateAppOptions): Promise<GeneratedApp> {
   try {
-    // Create a detailed system prompt
     const generativeModel = geminiAPI.getGenerativeModel({ model: MODEL });
     
     // Set safety settings
@@ -157,208 +164,42 @@ Ensure your JSON is properly formatted and can be parsed by JSON.parse().`;
     const response = result.response;
     const text = response.text();
 
-    // Extract JSON from the response
-    // This handles cases where the model might add surrounding markdown or text
-    const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/) || text.match(/```([\s\S]*?)```/) || [null, text];
-    let jsonText = jsonMatch[1] || text;
-    
-    // Clean up the JSON text to handle common issues
-    jsonText = jsonText.trim()
-      // Remove any non-JSON text before the opening brace
-      .replace(/^[\s\S]*?(?=\{)/, '')
-      // Remove everything after the last closing brace
-      .replace(/\}[\s\S]*$/, '}')
-      // Fix cases where single quotes are used instead of double quotes
-      .replace(/'/g, '"')
-      // Fix trailing commas in objects/arrays which are invalid in JSON
-      .replace(/,(\s*[\]}])/g, '$1')
-      // Fix missing commas between properties
-      .replace(/}(\s*){/g, '},{')
-      // Replace any "undefined" with null
-      .replace(/"undefined"/g, 'null')
-      // Make sure strings are properly quoted
-      .replace(/([{,]\s*)(\w+):/g, '$1"$2":')
-      // Fix cases where there are unquoted property values
-      .replace(/:\s*([a-zA-Z0-9_]+)(\s*[,}])/g, ':"$1"$2')
-      // Fix missing commas between property/value pairs
-      .replace(/("[^"]+"\s*:\s*"[^"]+")(\s*)("[^"]+")/, '$1,$2$3')
-      // Fix hanging properties in object (like "key": value with missing comma)
-      .replace(/"([^"]+)":\s*"([^"]+)"(?!\s*[,}])/g, '"$1": "$2",');
-    
+    // Enhanced JSON extraction and cleaning
+    let jsonText = text
+      .trim()
+      // If the LLM wrapped your JSON in ```json … ```
+      .replace(/^```json?\s*/, '')
+      .replace(/\s*```$/, '')
+      .trim();
+
+    let parsedResponse: GeneratedApp;
     try {
-      // First, try to parse the cleaned JSON
-      let parsedResponse;
-      try {
-        parsedResponse = JSON.parse(jsonText);
-      } catch (initialParseError: any) {
-        console.warn("Initial JSON parsing failed, attempting to fix:", initialParseError.message);
-        
-        // Check for the specific position errors that we frequently see
-        const positionMatches = initialParseError.message.match(/position (\d+)/);
-        if (positionMatches && positionMatches[1]) {
-          const errorPosition = parseInt(positionMatches[1]);
-          console.log(`Detected position ${errorPosition} error, applying targeted fix...`);
-          
-          // Inspect the problem area (5 chars before and 15 after)
-          const startIndex = Math.max(0, errorPosition - 5);
-          const endIndex = Math.min(jsonText.length, errorPosition + 15);
-          const problematicArea = jsonText.substring(startIndex, endIndex);
-          console.log(`Text around position ${errorPosition}:`, problematicArea);
-          
-          // Common fixes for position errors (including pos 91 and pos 98)
-          
-          // 1. Try adding a missing quote (common with unterminated strings)
-          const quoteFixedText = jsonText.substring(0, errorPosition) + '"' + jsonText.substring(errorPosition);
-          try {
-            parsedResponse = JSON.parse(quoteFixedText);
-            console.log("Quote fix successful!");
-            jsonText = quoteFixedText;
-          } catch (quoteFixError) {
-            console.log("Quote fix did not work, trying alternative approaches");
-            
-            // 2. Try adding a missing comma
-            const commaFixedText = jsonText.substring(0, errorPosition) + "," + jsonText.substring(errorPosition);
-            try {
-              parsedResponse = JSON.parse(commaFixedText);
-              console.log("Comma fix successful!");
-              jsonText = commaFixedText;
-            } catch (commaFixError) {
-              console.log("Comma fix did not work either");
-              
-              // 3. Check for unclosed quotes before the error position
-              let quotesBeforeError = 0;
-              for (let i = 0; i < errorPosition; i++) {
-                // Count unescaped quotes
-                if (jsonText[i] === '"' && (i === 0 || jsonText[i-1] !== '\\')) {
-                  quotesBeforeError++;
-                }
-              }
-              
-              if (quotesBeforeError % 2 !== 0) {
-                console.log("Detected unclosed quote before the error position");
-                
-                // Find a good place to close the string - look for comma, bracket or brace after position
-                let closingPos = errorPosition;
-                for (let i = errorPosition; i < Math.min(errorPosition + 20, jsonText.length); i++) {
-                  if ([',', '}', ']'].includes(jsonText[i])) {
-                    closingPos = i;
-                    break;
-                  }
-                }
-                
-                // Insert closing quote before that position
-                const balancedText = jsonText.substring(0, closingPos) + '"' + jsonText.substring(closingPos);
-                try {
-                  parsedResponse = JSON.parse(balancedText);
-                  console.log("String balancing fix successful!");
-                  jsonText = balancedText;
-                } catch (balanceFixError) {
-                  console.log("String balancing fix did not work, falling back to general fixes");
-                }
-              }
-            }
-          }
-        }
-        
-        // If still not fixed, try more aggressive approaches
-        if (!parsedResponse) {
-          // Look for something that looks like the start of our expected JSON structure
-          const potentialJsonStart = jsonText.indexOf('{"files":');
-          if (potentialJsonStart >= 0) {
-            jsonText = jsonText.substring(potentialJsonStart);
-            
-            // Try to find a valid closing bracket
-            let bracketCount = 0;
-            let validEndIndex = jsonText.length;
-            
-            for (let i = 0; i < jsonText.length; i++) {
-              if (jsonText[i] === '{') bracketCount++;
-              if (jsonText[i] === '}') {
-                bracketCount--;
-                if (bracketCount === 0) {
-                  validEndIndex = i + 1;
-                  break;
-                }
-              }
-            }
-            
-            jsonText = jsonText.substring(0, validEndIndex);
-            
-            // Additional cleanup - often helps with Gemini responses
-            jsonText = jsonText
-              // Replace any backslashes in front of quotes with double backslashes
-              .replace(/\\"/g, '\\\\"')
-              // Fix property/value pairs - ensure proper formatting
-              .replace(/([{,]\s*)([^"]\w+)\s*:\s*"([^"]+)"/g, '$1"$2":"$3"')
-              // Add missing commas between objects
-              .replace(/}(\s*){/g, '},\n{')
-              // Fix property values missing quotes
-              .replace(/:\s*([^",{}\[\]\s][^,{}"\[\]\s]*)\s*([,}])/g, ':"$1"$2');
-            
-            // Try parsing again
-            try {
-              parsedResponse = JSON.parse(jsonText);
-              console.log("Fixed JSON with aggressive cleaning!");
-            } catch (secondParseError: any) {
-              console.error("Second parse attempt failed:", secondParseError.message);
-              
-              // Last resort - manually fix the JSON by reconstructing the basic structure
-              try {
-                // Extract any valid file objects we can find
-                const fileMatches = jsonText.match(/"name"\s*:\s*"[^"]+"\s*,\s*"path"\s*:\s*"[^"]+"\s*,\s*"content"\s*:\s*"[^"]*"\s*,\s*"language"\s*:\s*"[^"]*"\s*,\s*"type"\s*:\s*"file"/g);
-                
-                if (fileMatches && fileMatches.length > 0) {
-                  // Rebuild a minimal valid structure
-                  const minimalJsonText = `{"files":[{${fileMatches[0]}}],"dependencies":{},"devDependencies":{}}`;
-                  parsedResponse = JSON.parse(minimalJsonText);
-                  console.log("Created minimal valid JSON from extracted content");
-                } else {
-                  throw new Error("Could not extract valid file data");
-                }
-              } catch (e) {
-                // If all parsing attempts fail, throw the original error
-                console.error("All parsing attempts failed");
-                throw initialParseError;
-              }
-            }
-          } else {
-            // If we can't find the start of a JSON structure, throw the original error
-            throw initialParseError;
-          }
-        }
-      }
+      parsedResponse = JSON.parse(jsonText) as GeneratedApp;
+    } catch (err: any) {
+      console.error('❌ Failed to JSON.parse Gemini output:', err.message);
+      console.error('Raw output was:\n', text);
+      console.error('What we fed into JSON.parse was:\n', jsonText);
+      throw new Error(`Failed to parse Ruby-style JSON from Gemini: ${err.message}`);
+    }
+    try {
+      // First attempt to parse
+      const parsedResponse = JSON.parse(jsonText);
       
-      // Handle the case where the response is still not a valid format
-      if (!parsedResponse || typeof parsedResponse !== 'object') {
-        throw new Error("Invalid response format: expected an object");
-      }
-      
-      // Validate and sanitize the response
+      // Validate the structure
       if (!parsedResponse.files || !Array.isArray(parsedResponse.files)) {
-        // Create a minimal valid structure if files are missing
-        parsedResponse.files = [
-          {
-            name: "index.html",
-            path: "/index.html",
-            type: "file",
-            content: "<html><body><h1>Generation Error</h1><p>The API returned an incomplete response. Please try again.</p></body></html>",
-            language: "html"
-          }
-        ];
+        throw new Error("Invalid response structure: missing or invalid files array");
       }
 
-      if (!parsedResponse.dependencies || typeof parsedResponse.dependencies !== 'object') {
-        parsedResponse.dependencies = {};
-      }
-
-      if (!parsedResponse.devDependencies || typeof parsedResponse.devDependencies !== 'object') {
-        parsedResponse.devDependencies = {};
-      }
+      // Clean up file contents
+      parsedResponse.files = parsedResponse.files.map((file: { content?: string }) => ({
+        ...file,
+        content: file.content?.replace(/\\n/g, '\n') || ''
+      }));
 
       return parsedResponse as GeneratedApp;
-    } catch (parseError: any) {
-      console.error("Error parsing Gemini response:", parseError);
-      throw new Error(`Failed to parse Gemini response: ${parseError.message || "Unknown parsing error"}`);
+    } catch (parseError) {
+      console.error("Parse error:", parseError, "\nCleaned JSON:", jsonText);
+      throw parseError;
     }
   } catch (error: any) {
     console.error("Error generating application:", error);
@@ -678,6 +519,35 @@ Ensure your JSON is properly formatted and can be parsed by JSON.parse().`;
 
     const response = result.response;
     const text = response.text();
+
+    // Enhance the response format requirements
+    const responseFormat = `
+RESPONSE FORMAT REQUIREMENTS:
+1. Return ONLY valid JSON
+2. Format for each file:
+   - Use proper escaping for special characters
+   - Ensure content is properly formatted
+   - Include complete implementation
+3. Structure:
+{
+  "files": [
+    {
+      "name": "string",
+      "path": "string",
+      "content": "string",
+      "language": "string",
+      "type": "file"
+    }
+  ],
+  "dependencies": {
+    "package-name": "version"
+  },
+  "devDependencies": {
+    "package-name": "version"
+  }
+}`;
+
+    const fullPrompt = `${prompt}\n\n${responseFormat}`;
 
     // Extract JSON from the response
     const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/) || text.match(/```([\s\S]*?)```/) || [null, text];

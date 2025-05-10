@@ -1,9 +1,18 @@
+// client/src/components/LivePreview.tsx
+
 import { useState, useEffect, useRef } from "react";
-import { RefreshCw, Smartphone, Tablet, Monitor, Eye } from "lucide-react";
+import {
+  RefreshCw,
+  Smartphone,
+  Tablet,
+  Monitor,
+  Eye,
+  AlertCircle,
+  Loader2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { PreviewSizeType, FileNode } from "@/lib/types";
-import { Loader2, AlertCircle } from "lucide-react";
 import CreativityMeter from "@/components/CreativityMeter";
+import { PreviewSizeType, FileNode } from "@/lib/types";
 import { GeneratedApp } from "@shared/schema";
 
 interface LivePreviewProps {
@@ -27,344 +36,292 @@ export default function LivePreview({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [previewHtml, setPreviewHtml] = useState<string>("");
   const [previewErrors, setPreviewErrors] = useState<string[]>([]);
-  const [isFixingErrors, setIsFixingErrors] = useState<boolean>(false);
-  
-  // Debug logging
-  console.log("LivePreview render", { isComplete, isGenerating, filesCount: generatedFiles.length });
 
-  // Handle error messages from the iframe
+  // Listen for errors inside the iframe
   useEffect(() => {
-    const handleIframeMessage = (event: MessageEvent) => {
-      if (event.data && (event.data.type === 'preview-error' || event.data.type === 'preview-console-error')) {
-        let errorMessage = '';
-        
-        if (event.data.type === 'preview-error') {
-          const errorPayload = event.data.payload;
-          errorMessage = `Error: ${errorPayload.message} at line ${errorPayload.lineno}, column ${errorPayload.colno}`;
-          if (errorPayload.stack) {
-            errorMessage += `\nStack: ${errorPayload.stack}`;
-          }
-        } else if (event.data.type === 'preview-console-error') {
-          const errorPayload = event.data.payload;
-          errorMessage = `Console Error: ${errorPayload.join(' ')}`;
-        }
-        
-        // Only add unique errors to prevent duplication
-        setPreviewErrors(prev => {
-          if (!prev.includes(errorMessage)) {
-            return [...prev, errorMessage];
-          }
-          return prev;
-        });
+    const handler = (e: MessageEvent) => {
+      if (!e.data || (e.data.type !== "preview-error" && e.data.type !== "preview-console-error")) {
+        return;
       }
+      let msg = "";
+      if (e.data.type === "preview-error") {
+        const p = e.data.payload;
+        msg = `Error: ${p.message} at ${p.lineno}:${p.colno}\nStack: ${p.stack || "n/a"}`;
+      } else {
+        msg = `Console Error: ${e.data.payload.join(" ")}`;
+      }
+      setPreviewErrors((prev) => (prev.includes(msg) ? prev : [...prev, msg]));
     };
-    
-    window.addEventListener('message', handleIframeMessage);
-    return () => {
-      window.removeEventListener('message', handleIframeMessage);
-    };
+
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
   }, []);
 
-  // Update preview HTML when files change - modified to work with just index.html files
+  // Trigger a preview render when generation completes or new files arrive
   useEffect(() => {
-    console.log("LivePreview effect triggered", { isComplete, filesCount: generatedFiles.length });
-    
-    if (generatedFiles.length > 0) {
-      // Even if not explicitly marked complete, check if we have an index.html
-      const hasIndexHtml = generatedFiles.some(file => file.name === "index.html" && file.content);
-      
-      // If explicitly marked as complete or we have an index.html, proceed
-      if (isComplete || hasIndexHtml) {
-        console.log("Generating preview for", generatedFiles.map(f => f.name));
-        renderPreview(generatedFiles);
-        setPreviewErrors([]);
-      }
+    if ((isComplete || generatedFiles.some((f) => f.name === "index.html")) && generatedFiles.length) {
+      renderPreview(generatedFiles);
+      setPreviewErrors([]);
     }
   }, [isComplete, generatedFiles]);
 
-  // Render the preview content
-  const renderPreview = (files: FileNode[]) => {
+  function renderPreview(files: FileNode[]) {
     try {
-      console.log("Processing files for preview:", files.map(f => f.name));
-      
-      // Find HTML file - prioritize index.html
-      const htmlFile = files.find(file => 
-        file.type === "file" && file.name === "index.html" && file.content
-      );
-      
-      // Create a basic HTML template if no HTML file is found
+      // 1) Our clean HTML template (never pull in the host's index.html)
       const defaultHtml = `<!DOCTYPE html>
 <html>
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Preview</title>
-    <style id="injected-css"></style>
-  </head>
-  <body>
-    <div id="root"></div>
-    <div id="app"></div>
-    <script id="injected-js"></script>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Preview</title>
+
+  <!-- UMD React/ReactDOM -->
+  <script crossorigin="anonymous" src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin="anonymous" src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+
+  <!-- Babel standalone -->
+  <script crossorigin="anonymous" src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Stub out Vite Fast-Refresh preamble -->
+  <script type="module">
+    import RefreshRuntime from "/@react-refresh";
+    RefreshRuntime.injectIntoGlobalHook(window);
+    window.$RefreshReg$ = () => {};
+    window.$RefreshSig$ = () => (t) => t;
+    window.__vite_plugin_react_preamble_installed__ = true;
+  </script>
+
+  <style id="injected-css"></style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- where we'll inject our transpiled bundle -->
+  <script
+    type="text/babel"
+    id="injected-js"
+    data-presets="react,typescript"
+  ></script>
+</body>
 </html>`;
 
-      // Use the found HTML file or the default template
-      let htmlContent = htmlFile?.content || defaultHtml;
-      
-      // Collect all CSS content
-      let cssContent = "";
-      files.forEach(file => {
-        if (file.type === "file" && file.name.endsWith(".css") && file.content) {
-          cssContent += `/* ${file.name} */\n${file.content}\n\n`;
-        }
-      });
-      
-      // Collect all JS content
-      let jsContent = "";
-      const jsFiles = files.filter(file => 
-        file.type === "file" && 
-        (file.name.endsWith(".js") || file.name.endsWith(".jsx")) &&
-        file.content
+      let htmlContent = defaultHtml;
+
+      // 2) Bundle and inject all CSS
+      const cssBundle = files
+        .filter((f) => f.name.endsWith(".css") && f.content)
+        .map((f) => `/* ${f.name} */\n${f.content}`)
+        .join("\n\n");
+      if (cssBundle) {
+        htmlContent = htmlContent.replace(
+          /<\/head>/i,
+          `<style>${cssBundle}</style></head>`
+        );
+      }
+
+      // 3) Select only your app code (no vite.config.ts, no host scripts)
+      const appFiles = files.filter(
+        (f) =>
+          f.type === "file" &&
+          /\.(js|jsx|ts|tsx)$/.test(f.name) &&
+          !/vite\.config\.ts$/i.test(f.name)
       );
-      
-      // Sort JS files to ensure proper execution order (utility files first, app.js last)
-      jsFiles.sort((a, b) => {
-        // Priority ranking - lower index = earlier execution
-        const filePriority = ["utils.js", "helpers.js", "components.js", "main.js", "index.js", "app.js"];
-        
-        // Get the priority index for each file
-        const aIndex = filePriority.findIndex(name => a.name.endsWith(name));
-        const bIndex = filePriority.findIndex(name => b.name.endsWith(name));
-        
-        // If both files are in the priority list, sort by priority
-        if (aIndex >= 0 && bIndex >= 0) return aIndex - bIndex;
-        
-        // If only one file is in the priority list
-        if (aIndex >= 0) return -1; // a comes first
-        if (bIndex >= 0) return 1;  // b comes first
-        
-        // Otherwise sort alphabetically
-        return a.name.localeCompare(b.name);
-      });
-      
-      // Wrap each script in a try-catch for better error isolation
-      jsFiles.forEach(file => {
-        jsContent += `
-// BEGIN ${file.name}
+
+      // 4) Provide React hook globals from UMD build
+      const runtimeHelpers = `
+// ─── React hook globals ───
+const { useState, useEffect, useRef, useMemo, useCallback } = React;
+const { createRoot } = ReactDOM;
+`;
+
+      // 5) Sanitize imports/exports, wrap each file in try/catch
+      // 5) Sanitize imports/exports & wrap each file in try/catch
+// 5) Sanitize imports/exports & strip TS non-null assertions
+const jsBundle = [
+  runtimeHelpers,
+  ...appFiles.map(f => {
+    const sanitized = f.content
+      .replace(/^\s*import\s.+;?$/gm, "")
+      .replace(/^\s*export\s+default\s+/gm, "")
+      .replace(/^\s*export\s+{\s*([^}]+)\s*};?$/gm, "")
+      // remove TS non-null `!`
+      .replace(/!(?=\))/g, "")
+      // remove TS “as Type” casts
+      .replace(/\s+as\s+[A-Za-z0-9_<>]+/g, "");
+
+    return `// ── ${f.name} ──
 try {
-${file.content}
-} catch (error) {
-  console.error("Error in ${file.name}:", error);
+${sanitized}
+} catch(e) {
+  console.error("Error in ${f.name}:", e);
+}`;
+  }),
+].join("\n\n");
+
+
+
+      // 6) Inject the JS bundle into our single placeholder
+     // 6) Inject the JS bundle + smarter mount logic
+
+const mountCode = `
+// ─── Mount App ───
+// If we’ve never created a root, do it now and stash it globally
+if (!window.__zerocodeRoot) {
+  window.__zerocodeRoot = ReactDOM.createRoot(
+    document.getElementById("root")
+  );
 }
-// END ${file.name}
+// Always render the latest <App /> into that root
+window.__zerocodeRoot.render(
+  React.createElement(App)
+);
+`;
 
-`;
-      });
-      
-      // Add CSS to HTML if needed
-      if (cssContent) {
-        htmlContent = htmlContent.replace(/<\/head>/i, `<style>${cssContent}</style></head>`);
-      }
-      
-      // Add JS to HTML if needed
-      if (jsContent) {
-        htmlContent = htmlContent.replace(/<\/body>/i, `<script>${jsContent}</script></body>`);
-      }
-      
-      // Add error tracking script
-      const errorScript = `
-<script>
-  // Capture JS errors
-  window.onerror = function(message, source, line, column, error) {
-    window.parent.postMessage({
-      type: 'preview-error',
-      payload: {
-        message: message,
-        source: source,
-        lineno: line,
-        colno: column,
-        stack: error ? error.stack : ''
-      }
-    }, '*');
-    console.error('Error:', message, source, line, column, error);
-  };
-  
-  // Capture console errors
-  const originalConsoleError = console.error;
-  console.error = function() {
-    const args = Array.from(arguments);
-    window.parent.postMessage({
-      type: 'preview-console-error',
-      payload: args.map(arg => String(arg))
-    }, '*');
-    originalConsoleError.apply(console, arguments);
-  };
-  
-  // Signal successful load
-  window.addEventListener('load', function() {
-    console.log('Preview loaded successfully');
-  });
-</script>
-`;
-      
-      // Add the error script to the HTML body
-      htmlContent = htmlContent.replace(/<body>/i, `<body>${errorScript}`);
-      
+htmlContent = htmlContent.replace(
+  /<script\s+type="text\/babel"[^>]*id="injected-js"[^>]*>\s*<\/script>/i,
+  `<script
+     type="text/babel"
+     id="injected-js"
+     data-presets="react,typescript"
+   >
+${jsBundle}
+${mountCode}
+   </script>`
+);
+
+
+      // 7) Add error-capture at the top of <body>
+      const errorCapture = `<script>
+window.onerror = function(message, source, lineno, colno, err) {
+  window.parent.postMessage({
+    type: 'preview-error',
+    payload: { message, lineno, colno, stack: err?.stack }
+  }, '*');
+};
+const orig = console.error;
+console.error = function(...args) {
+  window.parent.postMessage({
+    type: 'preview-console-error',
+    payload: args.map(String)
+  }, '*');
+  orig(...args);
+};
+</script>`;
+      htmlContent = htmlContent.replace(/<body>/i, `<body>${errorCapture}`);
+
       setPreviewHtml(htmlContent);
-      
-      // Update iframe content
+
+      // 8) Write into the iframe
+      const doc = iframeRef.current?.contentDocument;
       if (iframeRef.current) {
-        const iframeDoc = iframeRef.current.contentDocument || 
-                          (iframeRef.current.contentWindow && iframeRef.current.contentWindow.document);
-        
-        if (iframeDoc) {
-          console.log("Updating iframe content");
-          try {
-            iframeDoc.open();
-            iframeDoc.write(htmlContent);
-            iframeDoc.close();
-          } catch (e) {
-            console.error("Error writing to iframe:", e);
-          }
-        } else {
-          console.error("Could not access iframe document");
-        }
-      } else {
-        console.error("iframe reference is null");
-      }
-    } catch (error) {
-      console.error("Error generating preview content:", error);
+  iframeRef.current.srcdoc = htmlContent;
+}
+    } catch (e) {
+      console.error("Error generating preview:", e);
     }
-  };
+  }
 
-  // Helper function to find file content by extension (used for backward compatibility)
-  const findFileContent = (files: FileNode[], extension: string): string | null => {
-    // Recursively search through files
-    const searchFiles = (nodes: FileNode[]): string | null => {
-      for (const node of nodes) {
-        if (node.type === "file" && node.name.endsWith(extension) && node.content) {
-          return node.content;
-        }
-        if (node.type === "folder" && node.children) {
-          const result = searchFiles(node.children);
-          if (result) return result;
-        }
-      }
-      return null;
-    };
-    
-    return searchFiles(files);
-  };
+  // === Render different states ===
 
-  // Render a loading state while generating
   if (isGenerating) {
     return (
-      <div className="flex flex-col items-center justify-center h-full w-full p-8 bg-gray-50 dark:bg-gray-900">
+      <div className="flex flex-col items-center justify-center h-full p-8 bg-gray-50 dark:bg-gray-900">
         <Loader2 className="w-12 h-12 animate-spin text-primary mb-4" />
         <h3 className="text-xl font-semibold mb-2">Generating Your App</h3>
-        <p className="text-gray-500 dark:text-gray-400 text-center max-w-md">
-          We're crafting your application based on your description. This may take a few moments...
+        <p className="text-center text-gray-500 dark:text-gray-400">
+          Please wait while we build your preview…
         </p>
       </div>
     );
   }
-  
-  // Render an error state if generation failed
+
   if (isError) {
     return (
-      <div className="flex flex-col items-center justify-center h-full w-full p-8 bg-gray-50 dark:bg-gray-900">
+      <div className="flex flex-col items-center justify-center h-full p-8 bg-gray-50 dark:bg-gray-900">
         <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
         <h3 className="text-xl font-semibold mb-2">Generation Failed</h3>
-        <p className="text-gray-500 dark:text-gray-400 text-center max-w-md mb-6">
-          We encountered an error while generating your application. Please try again with a different prompt.
+        <p className="text-center text-gray-500 dark:text-gray-400 mb-4">
+          Something went wrong. Try again with a different prompt.
         </p>
         <Button onClick={onRegenerateClick} className="flex items-center">
-          <RefreshCw className="mr-2 h-4 w-4" />
-          <span>Try Again</span>
+          <RefreshCw className="mr-2 h-4 w-4" /> Try Again
         </Button>
       </div>
     );
   }
-  
-  // Render a prompt to start if no generation has happened yet
+
   if (!isComplete && generatedFiles.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full w-full p-8 bg-gray-50 dark:bg-gray-900">
+      <div className="flex flex-col items-center justify-center h-full p-8 bg-gray-50 dark:bg-gray-900">
         <Eye className="w-12 h-12 text-primary mb-4" />
         <h3 className="text-xl font-semibold mb-2">Preview Your App</h3>
-        <p className="text-gray-500 dark:text-gray-400 text-center max-w-md mb-6">
-          Enter a description and click "Generate App" to see a live preview of your application here.
+        <p className="text-center text-gray-500 dark:text-gray-400">
+          Enter a description and click “Generate App” to see it here.
         </p>
       </div>
     );
   }
 
-  // Render errors if there are any
   if (previewErrors.length > 0) {
     return (
       <div className="flex flex-col h-full">
-        <div className="flex justify-between items-center p-2 bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800">
-          <div className="flex items-center">
-            <AlertCircle className="h-5 w-5 text-red-500 mr-2" />
+        <div className="flex items-center justify-between p-2 bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800">
+          <div className="flex items-center space-x-2">
+            <AlertCircle className="h-5 w-5 text-red-500" />
             <span className="font-medium text-red-500">
               Preview Errors ({previewErrors.length})
             </span>
           </div>
-          <div className="flex space-x-2">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => setPreviewErrors([])}
-              className="text-red-500 border-red-200 hover:border-red-300"
-            >
-              Clear Errors
-            </Button>
-          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPreviewErrors([])}
+            className="text-red-500 border-red-200 hover:border-red-300"
+          >
+            Clear Errors
+          </Button>
         </div>
-        
         <div className="flex-1 overflow-auto p-4 bg-red-50 dark:bg-red-900/10">
-          {previewErrors.map((error, index) => (
-            <div key={index} className="mb-4 p-3 bg-white dark:bg-gray-800 border border-red-200 dark:border-red-800 rounded-md">
-              <pre className="whitespace-pre-wrap text-sm text-red-500">{error}</pre>
-            </div>
+          {previewErrors.map((err, i) => (
+            <pre
+              key={i}
+              className="mb-4 p-3 bg-white dark:bg-gray-800 border border-red-200 dark:border-red-800 rounded-md text-sm text-red-500"
+            >
+              {err}
+            </pre>
           ))}
         </div>
       </div>
     );
   }
 
-  // Main render with preview controls and iframe
+  // Default: show the iframe + controls
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Preview size controls */}
-      <div className="flex justify-between items-center p-2 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+      <div className="flex justify-between items-center p-2 border-b bg-gray-50 dark:bg-gray-800 dark:border-gray-700">
         <div className="flex space-x-2">
           <Button
-            variant={previewSize === "mobile" ? "default" : "outline"}
             size="icon"
+            variant={previewSize === "mobile" ? "default" : "outline"}
             onClick={() => setPreviewSize("mobile")}
-            className="h-8 w-8"
           >
             <Smartphone className="h-4 w-4" />
           </Button>
           <Button
-            variant={previewSize === "tablet" ? "default" : "outline"}
             size="icon"
+            variant={previewSize === "tablet" ? "default" : "outline"}
             onClick={() => setPreviewSize("tablet")}
-            className="h-8 w-8"
           >
             <Tablet className="h-4 w-4" />
           </Button>
           <Button
-            variant={previewSize === "desktop" ? "default" : "outline"}
             size="icon"
+            variant={previewSize === "desktop" ? "default" : "outline"}
             onClick={() => setPreviewSize("desktop")}
-            className="h-8 w-8"
           >
             <Monitor className="h-4 w-4" />
           </Button>
         </div>
-        
         <Button
           variant="ghost"
           size="sm"
@@ -372,49 +329,42 @@ ${file.content}
             if (iframeRef.current) {
               try {
                 iframeRef.current.contentWindow?.location.reload();
-              } catch (e) {
-                console.error("Failed to reload iframe:", e);
-                // Alternative approach for cross-origin frames
-                if (iframeRef.current.contentDocument) {
-                  iframeRef.current.contentDocument.open();
-                  iframeRef.current.contentDocument.write(previewHtml);
-                  iframeRef.current.contentDocument.close();
+              } catch {
+                const doc = iframeRef.current.contentDocument;
+                if (doc) {
+                  doc.open();
+                  doc.write(previewHtml);
+                  doc.close();
                 }
               }
             }
           }}
           className="flex items-center"
         >
-          <RefreshCw className="h-4 w-4 mr-1" />
-          <span>Refresh</span>
+          <RefreshCw className="h-4 w-4 mr-1" /> Refresh
         </Button>
       </div>
-      
-      {/* Preview area with creativity meter */}
-      <div className="flex-1 overflow-hidden bg-gray-100 dark:bg-gray-900 p-4 flex">
-        {/* App preview */}
+      <div className="flex-1 flex bg-gray-100 dark:bg-gray-900 p-4 overflow-hidden">
         <div className="flex-1 flex justify-center items-start overflow-auto">
-          <div 
-            className={`bg-white dark:bg-gray-800 rounded-md shadow-md overflow-hidden transition-all duration-300 flex flex-col ${
-              previewSize === "desktop" 
-                ? "w-full h-full" 
-                : previewSize === "tablet" 
-                ? "w-[768px] h-[1024px]" 
+          <div
+            className={`bg-white dark:bg-gray-800 rounded-md shadow-md flex flex-col transition-all ${
+              previewSize === "desktop"
+                ? "w-full h-full"
+                : previewSize === "tablet"
+                ? "w-[768px] h-[1024px]"
                 : "w-[375px] h-[667px]"
             }`}
           >
             <iframe
               ref={iframeRef}
               title="App Preview"
+              srcDoc={previewHtml}
               className="flex-1 w-full h-full"
-              sandbox="allow-same-origin allow-scripts allow-forms"
             />
           </div>
         </div>
-        
-        {/* Creativity Metrics Panel - displays when app is complete and metrics are available */}
         {isComplete && generatedApp && (
-          <div className="w-72 ml-4 flex-shrink-0 overflow-auto">
+          <div className="w-72 ml-4 overflow-auto">
             <CreativityMeter
               metrics={generatedApp.creativityMetrics}
               isLoading={!generatedApp.creativityMetrics}
