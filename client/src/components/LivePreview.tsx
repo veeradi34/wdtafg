@@ -37,7 +37,7 @@ export default function LivePreview({
   const [previewHtml, setPreviewHtml] = useState<string>("");
   const [previewErrors, setPreviewErrors] = useState<string[]>([]);
 
-  // Listen for errors inside the iframe
+  // Listen for errors posted from the iframe
   useEffect(() => {
     const handler = (e: MessageEvent) => {
       if (!e.data || (e.data.type !== "preview-error" && e.data.type !== "preview-console-error")) {
@@ -50,16 +50,16 @@ export default function LivePreview({
       } else {
         msg = `Console Error: ${e.data.payload.join(" ")}`;
       }
-      setPreviewErrors((prev) => (prev.includes(msg) ? prev : [...prev, msg]));
+      setPreviewErrors(prev => (prev.includes(msg) ? prev : [...prev, msg]));
     };
 
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
   }, []);
 
-  // Trigger a preview render when generation completes or new files arrive
+  // Trigger rendering when generation finishes or files change
   useEffect(() => {
-    if ((isComplete || generatedFiles.some((f) => f.name === "index.html")) && generatedFiles.length) {
+    if ((isComplete || generatedFiles.some(f => f.name === "index.html")) && generatedFiles.length) {
       renderPreview(generatedFiles);
       setPreviewErrors([]);
     }
@@ -67,7 +67,7 @@ export default function LivePreview({
 
   function renderPreview(files: FileNode[]) {
     try {
-      // 1) Our clean HTML template (never pull in the host's index.html)
+      // 1) Clean HTML template (never use host index.html)
       const defaultHtml = `<!DOCTYPE html>
 <html>
 <head>
@@ -79,10 +79,13 @@ export default function LivePreview({
   <script crossorigin="anonymous" src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script crossorigin="anonymous" src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
 
+  <!-- UMD React Router DOM -->
+  <script crossorigin="anonymous" src="https://unpkg.com/react-router-dom@6/umd/react-router-dom.development.js"></script>
+
   <!-- Babel standalone -->
   <script crossorigin="anonymous" src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-  <!-- Stub out Vite Fast-Refresh preamble -->
+  <!-- Stub Vite Fast-Refresh preamble -->
   <script type="module">
     import RefreshRuntime from "/@react-refresh";
     RefreshRuntime.injectIntoGlobalHook(window);
@@ -96,7 +99,7 @@ export default function LivePreview({
 <body>
   <div id="root"></div>
 
-  <!-- where we'll inject our transpiled bundle -->
+  <!-- bundle + mount will be injected here -->
   <script
     type="text/babel"
     id="injected-js"
@@ -107,10 +110,10 @@ export default function LivePreview({
 
       let htmlContent = defaultHtml;
 
-      // 2) Bundle and inject all CSS
+      // 2) Bundle all CSS
       const cssBundle = files
-        .filter((f) => f.name.endsWith(".css") && f.content)
-        .map((f) => `/* ${f.name} */\n${f.content}`)
+        .filter(f => f.name.endsWith(".css") && f.content)
+        .map(f => `/* ${f.name} */\n${f.content}`)
         .join("\n\n");
       if (cssBundle) {
         htmlContent = htmlContent.replace(
@@ -119,109 +122,100 @@ export default function LivePreview({
         );
       }
 
-      // 3) Select only your app code (no vite.config.ts, no host scripts)
+      // 3) Filter to app JS/TSX files (exclude all *.config.js/ts)
       const appFiles = files.filter(
-        (f) =>
+        (f): f is FileNode & { content: string } =>
           f.type === "file" &&
+          typeof f.content === "string" &&
           /\.(js|jsx|ts|tsx)$/.test(f.name) &&
-          !/vite\.config\.ts$/i.test(f.name)
+          !/\.config\.(js|ts)$/i.test(f.name)
       );
 
-      // 4) Provide React hook globals from UMD build
+      // 4) Expose React, Router globals
       const runtimeHelpers = `
 // ─── React hook globals ───
 const { useState, useEffect, useRef, useMemo, useCallback } = React;
 const { createRoot } = ReactDOM;
+// ─── React Router globals ───
+const { BrowserRouter: Router, Routes, Route, Link, Navigate, useParams, useNavigate } = ReactRouterDOM;
 `;
 
-      // 5) Sanitize imports/exports, wrap each file in try/catch
-      // 5) Sanitize imports/exports & wrap each file in try/catch
-// 5) Sanitize imports/exports & strip TS non-null assertions
-const jsBundle = [
-  runtimeHelpers,
-  ...appFiles.map(f => {
-    const sanitized = f.content
-      .replace(/^\s*import\s.+;?$/gm, "")
-      .replace(/^\s*export\s+default\s+/gm, "")
-      .replace(/^\s*export\s+{\s*([^}]+)\s*};?$/gm, "")
-      // remove TS non-null `!`
-      .replace(/!(?=\))/g, "")
-      // remove TS “as Type” casts
-      .replace(/\s+as\s+[A-Za-z0-9_<>]+/g, "");
-
-    return `// ── ${f.name} ──
+      // 5) Sanitize imports/exports & strip TS syntax
+      const jsBundle = [
+        runtimeHelpers,
+        ...appFiles.map(f => {
+          const sanitized = f.content
+            .replace(/^\s*import\s.+;?$/gm, "")
+            .replace(/^\s*export\s+default\s+/gm, "")
+            .replace(/^\s*export\s+{\s*([^}]+)\s*};?$/gm, "")
+            .replace(/!(?=\))/g, "")
+            .replace(/\s+as\s+[A-Za-z0-9_<>, ]+/g, "");
+          return `// ── ${f.name} ──
 try {
 ${sanitized}
 } catch(e) {
   console.error("Error in ${f.name}:", e);
 }`;
-  }),
-].join("\n\n");
+        }),
+      ].join("\n\n");
 
-
-
-      // 6) Inject the JS bundle into our single placeholder
-     // 6) Inject the JS bundle + smarter mount logic
-
-const mountCode = `
+      // 6) Mount snippet (createRoot only once)
+      const mountCode = `
 // ─── Mount App ───
-// If we’ve never created a root, do it now and stash it globally
-if (!window.__zerocodeRoot) {
-  window.__zerocodeRoot = ReactDOM.createRoot(
+if (!window.__zcRoot) {
+  window.__zcRoot = ReactDOM.createRoot(
     document.getElementById("root")
   );
 }
-// Always render the latest <App /> into that root
-window.__zerocodeRoot.render(
+window.__zcRoot.render(
   React.createElement(App)
 );
 `;
 
-htmlContent = htmlContent.replace(
-  /<script\s+type="text\/babel"[^>]*id="injected-js"[^>]*>\s*<\/script>/i,
-  `<script
-     type="text/babel"
-     id="injected-js"
-     data-presets="react,typescript"
-   >
+      // 7) Inject bundle + mount snippet
+      htmlContent = htmlContent.replace(
+        /<script\s+type="text\/babel"[^>]*id="injected-js"[^>]*>\s*<\/script>/i,
+        `<script
+           type="text/babel"
+           id="injected-js"
+           data-presets="react,typescript"
+         >
 ${jsBundle}
+
 ${mountCode}
-   </script>`
-);
+         </script>`
+      );
 
-
-      // 7) Add error-capture at the top of <body>
+      // 8) Error capture snippet
       const errorCapture = `<script>
 window.onerror = function(message, source, lineno, colno, err) {
-  window.parent.postMessage({
+  parent.postMessage({
     type: 'preview-error',
     payload: { message, lineno, colno, stack: err?.stack }
   }, '*');
 };
-const orig = console.error;
+const origErr = console.error;
 console.error = function(...args) {
-  window.parent.postMessage({
+  parent.postMessage({
     type: 'preview-console-error',
     payload: args.map(String)
   }, '*');
-  orig(...args);
+  origErr(...args);
 };
 </script>`;
       htmlContent = htmlContent.replace(/<body>/i, `<body>${errorCapture}`);
 
+      // 9) Render into iframe via srcdoc
       setPreviewHtml(htmlContent);
-
-      // 8) Write into the iframe
-      const doc = iframeRef.current?.contentDocument;
       if (iframeRef.current) {
-  iframeRef.current.srcdoc = htmlContent;
-}
+        iframeRef.current.srcdoc = htmlContent;
+      }
     } catch (e) {
       console.error("Error generating preview:", e);
     }
   }
 
-  // === Render different states ===
+  // ===== UI for different states =====
 
   if (isGenerating) {
     return (
@@ -295,7 +289,7 @@ console.error = function(...args) {
     );
   }
 
-  // Default: show the iframe + controls
+  // Default: controls + iframe
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <div className="flex justify-between items-center p-2 border-b bg-gray-50 dark:bg-gray-800 dark:border-gray-700">
@@ -330,12 +324,9 @@ console.error = function(...args) {
               try {
                 iframeRef.current.contentWindow?.location.reload();
               } catch {
-                const doc = iframeRef.current.contentDocument;
-                if (doc) {
-                  doc.open();
-                  doc.write(previewHtml);
-                  doc.close();
-                }
+                iframeRef.current.contentDocument?.open();
+                iframeRef.current.contentDocument?.write(previewHtml);
+                iframeRef.current.contentDocument?.close();
               }
             }
           }}
@@ -358,7 +349,6 @@ console.error = function(...args) {
             <iframe
               ref={iframeRef}
               title="App Preview"
-              srcDoc={previewHtml}
               className="flex-1 w-full h-full"
             />
           </div>
