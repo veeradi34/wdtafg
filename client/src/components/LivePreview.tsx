@@ -80,7 +80,7 @@ export default function LivePreview({
   <script crossorigin="anonymous" src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
 
   <!-- UMD React Router DOM -->
-  <script crossorigin="anonymous" src="https://unpkg.com/react-router-dom@6/umd/react-router-dom.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-router-dom@6/umd/react-router-dom.development.js" onload="window.ReactRouterDOM = window.ReactRouterDOM || this; console.log('Router loaded');"></script>
 
   <!-- Babel standalone -->
   <script crossorigin="anonymous" src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -171,22 +171,15 @@ window.__zcRoot.render(
   React.createElement(App)
 );
 `;
+const wrappedScript = `(function waitForGlobals() {\n  if (!(window.React && window.ReactDOM && window.ReactRouterDOM)) {\n    return setTimeout(waitForGlobals, 50);\n  }\n  try {\n    ${jsBundle}\n    ${mountCode}\n  } catch (e) {\n    console.error("Runtime error:", e);\n    parent.postMessage({\n      type: 'preview-error',\n      payload: { message: e.message, stack: e.stack || '', lineno: 0, colno: 0 }\n    }, '*');\n  }\n})();`;
+
 
       // 7) Inject bundle + mount snippet
       htmlContent = htmlContent.replace(
         /<script\s+type="text\/babel"[^>]*id="injected-js"[^>]*>\s*<\/script>/i,
-        `<script
-           type="text/babel"
-           id="injected-js"
-           data-presets="react,typescript"
-         >
-${jsBundle}
-
-${mountCode}
-         </script>`
+        `<script type="text/babel" id="injected-js" data-presets="react,typescript">\n${wrappedScript}\n</script>`
       );
 
-      // 8) Error capture snippet
       const errorCapture = `<script>
 window.onerror = function(message, source, lineno, colno, err) {
   parent.postMessage({
@@ -202,7 +195,16 @@ console.error = function(...args) {
   }, '*');
   origErr(...args);
 };
-</script>`;
+
+  // All globals are ready, run app code
+${jsBundle}
+
+${mountCode}
+})();
+
+         </script>`;
+        
+
       htmlContent = htmlContent.replace(/<body>/i, `<body>${errorCapture}`);
 
       // 9) Render into iframe via srcdoc

@@ -518,7 +518,7 @@ Ensure your JSON is properly formatted and can be parsed by JSON.parse().`;
     }
 
     const response = result.response;
-    const text = response.text();
+    const text = await response.text();
 
     // Enhance the response format requirements
     const responseFormat = `
