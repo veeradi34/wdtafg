@@ -2,7 +2,8 @@ import express, { type Request, Response, NextFunction } from "express";
 import cors from "cors";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
-
+import fetch from 'node-fetch';
+globalThis.fetch = fetch as any;
 const app = express();
 
 // Add CORS configuration
