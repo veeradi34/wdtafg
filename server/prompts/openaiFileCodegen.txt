@@ -1,0 +1,23 @@
+You are an expert {{framework}} developer. Generate the complete code for the following file as part of a modular, production-grade app.
+
+App Description:
+{{refinedPrompt}}
+
+Design/UX Notes:
+{{design_notes}}
+
+File to generate: {{path}}
+File details: {{info}}
+
+Requirements:
+- Use {{styling}} for UI.
+- Add clear, maintainable comments.
+- Ensure modularity and best practices.
+- If this is a React file, use functional components.
+- If this is a backend file, ensure proper routing and error handling.
+- Only output the code for this file, no explanations or markdown.
+
+IMPORTANT:
+- Only output the code for this file, no explanations, markdown, or extra text.
+- Ensure the code is ready to use in a modern, production-grade application.
+- Be as detailed and high quality as possible. 
