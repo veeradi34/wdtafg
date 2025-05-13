@@ -1,6 +1,5 @@
 process.env.GOOGLE_API_KEY = 'AIzaSyDNo-6CNPVKHYYHNnts3tx7sOfiRNorm1w';
-process.env.OPENAI_API_KEY = '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';
-
+process.env.OPENAI_API_KEY =
 import { describe, it, expect, beforeAll } from 'vitest';
 import * as openaiCodegenAgent from '../lib/openaiCodegenAgent';
 import type { GenerateAppOptions } from '../lib/openaiCodegenAgent';
