@@ -215,14 +215,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Step 2: Generate code for each file
       const generated_files = [];
       for (const file of appJson.files) {
-        const content = await generateFileCode({
-          refinedPrompt,
-          design_notes,
-          filePath: file.path,
-          fileInfo: file.info || {},
-          framework: framework || "React",
-          styling: styling || "Tailwind CSS"
-        });
+        let errorContext = '';
+        let result = {
+          code: '',
+          isStub: true,
+          errorMsg: 'Codegen did not run.'
+        };
+        // Try up to 3 times to generate a valid file
+        for (let attempt = 0; attempt < 3; attempt++) {
+          result = await generateFileCode({
+            refinedPrompt,
+            design_notes,
+            filePath: file.path,
+            fileInfo: file.info || {},
+            framework: framework || "React",
+            styling: styling || "Tailwind CSS",
+            errorContext,
+            maxRetries: 0 // We handle retries here, so set to 0 in the agent
+          });
+          if (!result.isStub) break;
+          errorContext = result.errorMsg || errorContext;
+        }
         // Infer name, type, and language
         const name = file.path.split("/").pop() || file.path;
         const ext = name.split(".").pop() || "";
@@ -242,8 +255,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           name,
           path: file.path,
           type: "file",
-          content,
-          language
+          content: result.code,
+          language,
+          isStub: result.isStub,
+          errorMsg: result.errorMsg || ''
         });
       }
       res.json({

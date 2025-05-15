@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { FileNode } from "@shared/schema";
 import { promises as fs } from 'fs';
 import path from 'path';
+import { generateFileCode } from './openaiFileCodegenAgent';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const MODEL = "gpt-3.5-turbo-0125";
@@ -43,12 +44,39 @@ export async function fixAppErrors(
     // Remove duplicates
     allErrors = Array.from(new Set(allErrors));
 
+    // --- NEW: Regenerate stub files before running error fix prompt ---
+    const stubPattern = /^const ([A-Za-z0-9_]+) = \(\) => null; window\.\1 = \1;$/;
+    const regeneratedFiles = await Promise.all(files.map(async (file) => {
+      if (
+        file.type === "file" &&
+        typeof file.content === "string" &&
+        stubPattern.test(file.content.trim())
+      ) {
+        // Attempt to regenerate the file using codegen agent
+        try {
+          const regenerated = await generateFileCode({
+            refinedPrompt: '', // You may want to pass the original refinedPrompt if available
+            design_notes: '',
+            filePath: file.path,
+            fileInfo: {},
+            framework,
+            styling: 'Tailwind CSS',
+          });
+          return { ...file, content: regenerated };
+        } catch (e) {
+          // If regeneration fails, keep the stub
+          return file;
+        }
+      }
+      return file;
+    }));
+
     const promptPath = path.join(__dirname, '../prompts/openaiErrorFix.txt');
     const template = await fs.readFile(promptPath, 'utf-8');
     const errorsStr = allErrors.length
       ? allErrors.map((error, i) => `${i + 1}. ${error}`).join('\n')
       : 'No explicit error messages, but the app is not working as expected.';
-    const filesStr = files.filter(f => f.type === "file" && f.content)
+    const filesStr = regeneratedFiles.filter(f => f.type === "file" && f.content)
       .map(file => `--- File: ${file.path} ---\n${file.content}\n`).join('\n');
     const systemPrompt = interpolatePrompt(template, { framework, errors: errorsStr, files: filesStr });
 
@@ -56,7 +84,7 @@ export async function fixAppErrors(
     let lastError = null;
     let fixedResponse = null;
     let debugInfo = [];
-    let fixedFiles = files;
+    let fixedFiles = regeneratedFiles;
     for (let attempt = 1; attempt <= 2; attempt++) {
       const response = await openai.chat.completions.create({
         model: MODEL,

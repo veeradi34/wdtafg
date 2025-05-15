@@ -1,5 +1,4 @@
 You are an expert {{framework}} developer. Generate the complete code for the following file as part of a modular, production-grade app.
-
 App Description:
 {{refinedPrompt}}
 
