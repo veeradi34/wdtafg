@@ -11,6 +11,19 @@ import { fixAppErrors } from "./lib/openaiErrorFixAgent";
 import OpenAI from "openai";
 import { handleChatbotEdit } from "./lib/chatbotAgent";
 import { getAppIdeaFeedback, getUpdateFeedback } from "./lib/conversationalBotAgent";
+import { ObjectId } from "mongodb";
+import clientPromise from "./lib/mongodb";
+
+// Helper functions for backend validation (move to top-level)
+function extractComponentNames(code: string): string[] {
+  const matches = code.match(/<([A-Z][A-Za-z0-9_]*)\b/g) || [];
+  return Array.from(new Set(matches.map((m: string) => m.replace('<', ''))));
+}
+function getAllComponentNames(files: { name: string }[]): string[] {
+  return files
+    .filter((f: { name: string }) => /\.(js|jsx|ts|tsx)$/.test(f.name))
+    .map((f: { name: string }) => f.name.replace(/\..*$/, ''));
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // API routes prefix
@@ -218,7 +231,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const conversationMessage = await getAppIdeaFeedback(refinedPrompt);
       
       // Step 2: Generate code for each file
-      const generated_files = [];
+      let generated_files = [];
       for (const file of appJson.files) {
         let errorContext = '';
         let result = {
@@ -266,6 +279,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
           errorMsg: result.errorMsg || ''
         });
       }
+
+      // Backend validation: Ensure all referenced components are generated
+      const mainFile = generated_files.find(f => f.name === 'App.jsx' || f.name === 'App.tsx' || f.name === 'App.js' || f.name === 'App.ts');
+      if (mainFile && typeof mainFile.content === 'string') {
+        const referenced = extractComponentNames(mainFile.content);
+        const generated = getAllComponentNames(generated_files);
+        const missing = referenced.filter(name => !generated.includes(name) && name !== 'App');
+        for (const missingComponent of missing) {
+          // Generate missing component file
+          const filePath = `/src/${missingComponent}.jsx`;
+          const fileInfo = { description: `Component ${missingComponent} used in App but not generated.` };
+          let errorContext = '';
+          let result: { code: string; isStub: boolean; errorMsg: string } = { code: '', isStub: true, errorMsg: '' };
+          for (let attempt = 0; attempt < 3; attempt++) {
+            const genResult = await generateFileCode({
+              refinedPrompt,
+              design_notes,
+              filePath,
+              fileInfo,
+              framework: framework || "React",
+              styling: styling || "Tailwind CSS",
+              errorContext,
+              maxRetries: 0
+            });
+            result = {
+              code: genResult.code,
+              isStub: genResult.isStub,
+              errorMsg: genResult.errorMsg || ''
+            };
+            if (!result.isStub) break;
+            errorContext = result.errorMsg || errorContext;
+          }
+          generated_files.push({
+            name: `${missingComponent}.jsx`,
+            path: filePath,
+            type: "file",
+            content: result.code,
+            language: "jsx",
+            isStub: result.isStub,
+            errorMsg: result.errorMsg || ''
+          });
+        }
+      }
+
       res.json({
         generated_files,
         dependencies: appJson.dependencies || {},
@@ -336,6 +393,150 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Error in conversation/update:", error);
       res.status(500).json({ error: error.message || "Unknown error" });
+    }
+  });
+
+  // --- MongoDB Connection Test Route ---
+  app.get("/api/mongo-status", async (req: Request, res: Response) => {
+    try {
+      const client = await clientPromise;
+      await client.db("admin").command({ ping: 1 });
+      res.status(200).json({ status: "connected" });
+    } catch (error: any) {
+      console.error("MongoDB connection error:", error);
+      res.status(500).json({ status: "error", message: error.message });
+    }
+  });
+
+  // --- MongoDB Projects API Routes ---
+  app.get("/api/mongo/projects", async (req: Request, res: Response) => {
+    try {
+      const client = await clientPromise;
+      const db = client.db("zerocode");
+      const projects = db.collection("projects");
+      const userId = req.query.userId || 'anonymous';
+      const userProjects = await projects.find({ userId }).sort({ updatedAt: -1 }).toArray();
+      return res.status(200).json(userProjects);
+    } catch (error: any) {
+      console.error("Error fetching projects:", error);
+      return res.status(500).json({ message: "Error fetching projects", error: error.message });
+    }
+  });
+
+  app.get("/api/mongo/projects/:id", async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      if (!id) return res.status(400).json({ message: "Invalid project ID" });
+      let objectId;
+      try { objectId = new ObjectId(id); } catch (error) { return res.status(400).json({ message: "Invalid project ID format" }); }
+      const client = await clientPromise;
+      const db = client.db("zerocode");
+      const projects = db.collection("projects");
+      const project = await projects.findOne({ _id: objectId });
+      if (!project) return res.status(404).json({ message: "Project not found" });
+      return res.status(200).json(project);
+    } catch (error: any) {
+      console.error("Error fetching project:", error);
+      return res.status(500).json({ message: "Error fetching project", error: error.message });
+    }
+  });
+
+  app.post("/api/mongo/projects", async (req: Request, res: Response) => {
+    try {
+      const { name, prompt, generatedApp, userId = 'anonymous' } = req.body;
+      if (!name || !prompt || !generatedApp) return res.status(400).json({ message: "Name, prompt, and generatedApp are required" });
+      const newProject = { name, prompt, generatedApp, userId, createdAt: new Date(), updatedAt: new Date() };
+      const client = await clientPromise;
+      const db = client.db("zerocode");
+      const projects = db.collection("projects");
+      const result = await projects.insertOne(newProject);
+      return res.status(201).json({ _id: result.insertedId, ...newProject });
+    } catch (error: any) {
+      console.error("Error creating project:", error);
+      return res.status(500).json({ message: "Error creating project", error: error.message });
+    }
+  });
+
+  app.put("/api/mongo/projects/:id", async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { name, prompt, generatedApp } = req.body;
+      if (!id) return res.status(400).json({ message: "Invalid project ID" });
+      let objectId;
+      try { objectId = new ObjectId(id); } catch (error) { return res.status(400).json({ message: "Invalid project ID format" }); }
+      const client = await clientPromise;
+      const db = client.db("zerocode");
+      const projects = db.collection("projects");
+      const existingProject = await projects.findOne({ _id: objectId });
+      if (!existingProject) return res.status(404).json({ message: "Project not found" });
+      const updateData = { $set: { ...(name && { name }), ...(prompt && { prompt }), ...(generatedApp && { generatedApp }), updatedAt: new Date() } };
+      await projects.updateOne({ _id: objectId }, updateData);
+      const updatedProject = await projects.findOne({ _id: objectId });
+      return res.status(200).json(updatedProject);
+    } catch (error: any) {
+      console.error("Error updating project:", error);
+      return res.status(500).json({ message: "Error updating project", error: error.message });
+    }
+  });
+
+  app.delete("/api/mongo/projects/:id", async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      if (!id) return res.status(400).json({ message: "Invalid project ID" });
+      let objectId;
+      try { objectId = new ObjectId(id); } catch (error) { return res.status(400).json({ message: "Invalid project ID format" }); }
+      const client = await clientPromise;
+      const db = client.db("zerocode");
+      const projects = db.collection("projects");
+      const existingProject = await projects.findOne({ _id: objectId });
+      if (!existingProject) return res.status(404).json({ message: "Project not found" });
+      await projects.deleteOne({ _id: objectId });
+      return res.status(204).send();
+    } catch (error: any) {
+      console.error("Error deleting project:", error);
+      return res.status(500).json({ message: "Error deleting project", error: error.message });
+    }
+  });
+
+  // --- MongoDB App Generation Route ---
+  app.post("/api/mongo/generate", async (req: Request, res: Response) => {
+    try {
+      const { prompt, settings, userId = 'anonymous' } = req.body;
+      if (!prompt) return res.status(400).json({ message: 'Prompt is required' });
+      console.log('Generate request with MongoDB caching:', { prompt, settings });
+      const client = await clientPromise;
+      const db = client.db("zerocode");
+      const generationsCollection = db.collection("generations");
+      const existingGeneration = await generationsCollection.findOne({ 
+        prompt,
+        'settings.framework': settings.framework,
+        'settings.styling': settings.styling,
+        'settings.stateManagement': settings.stateManagement, 
+      });
+      if (existingGeneration && existingGeneration.generatedApp) {
+        console.log('Using cached generation result');
+        await generationsCollection.updateOne(
+          { _id: existingGeneration._id },
+          { $set: { lastAccessed: new Date() } }
+        );
+        return res.status(200).json(existingGeneration.generatedApp);
+      }
+      // No cached result, call your existing generation function
+      res.status(501).json({ message: "MongoDB caching set up, but need to implement your generation function" });
+      // After generation, store the result in MongoDB:
+      /*
+      await generationsCollection.insertOne({
+        prompt,
+        settings,
+        userId,
+        generatedAt: new Date(),
+        lastAccessed: new Date(),
+        generatedApp
+      });
+      */
+    } catch (error: any) {
+      console.error('Error generating app with MongoDB caching:', error);
+      res.status(500).json({ message: 'Failed to generate app', error: error.message });
     }
   });
 

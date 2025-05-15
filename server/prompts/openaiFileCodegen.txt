@@ -19,4 +19,5 @@ Requirements:
 IMPORTANT:
 - Only output the code for this file, no explanations, markdown, or extra text.
 - Ensure the code is ready to use in a modern, production-grade application.
+- If this file references any component (e.g., <Sidebar />, <Header />, etc.), ensure that a corresponding file is generated for that component as well. Do NOT reference any component that is not defined in the generated files. Every referenced component must have its own file generated in this app.
 - Be as detailed and high quality as possible. 

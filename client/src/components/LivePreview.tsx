@@ -16,11 +16,6 @@ import { PreviewSizeType, FileNode } from "@/lib/types";
 import { GeneratedApp } from "@shared/schema";
 import React from "react";
 
-// Helper to generate visually appealing stub components for missing components
-function stubComponent(name: string) {
-  return `const ${name} = () => (React.createElement('div', { style: { border: '2px dashed #888', borderRadius: '8px', padding: '32px', margin: '16px', color: '#888', background: '#f8fafc', fontFamily: 'sans-serif', textAlign: 'center', minHeight: '120px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' } }, [ React.createElement('strong', { key: 'title', style: { fontSize: '1.2em', marginBottom: '8px' } }, 'Missing: <${name} />'), React.createElement('span', { key: 'msg' }, 'This component was referenced but not generated. Please try regenerating your app or updating your prompt.') ])); window.${name} = ${name};`;
-}
-
 interface LivePreviewProps {
   isGenerating: boolean;
   isComplete: boolean;
@@ -227,46 +222,6 @@ export default function LivePreview({
       );
       console.log('[LivePreview] JS/TSX files for preview:', appFiles.map(f => f.name));
 
-      // --- Auto-stub missing components ---
-      // 1. Collect all defined component names
-      const definedComponents = new Set(
-        appFiles.map(f => f.name.replace(/\..*$/, ""))
-      );
-      // 2. Collect all used component names (e.g., <Sidebar /> and also in code references)
-      const usedComponents = new Set<string>();
-      appFiles.forEach(f => {
-        // Find JSX usage: <ComponentName ...>
-        const jsxMatches = f.content.match(/<([A-Z][A-Za-z0-9_]*)\b/g);
-        if (jsxMatches) {
-          jsxMatches.forEach(m => {
-            const comp = m.replace('<', '');
-            if (comp && comp !== 'Router' && comp !== 'Switch' && comp !== 'Route' && comp !== 'Link' && comp !== 'Navigate' && comp !== 'Routes' && comp !== 'useParams' && comp !== 'useNavigate') {
-              usedComponents.add(comp);
-            }
-          });
-        }
-        // Find code references: component used as identifier (e.g., component={Home})
-        const codeMatches = f.content.match(/component\s*=\s*{\s*([A-Z][A-Za-z0-9_]*)\s*}/g);
-        if (codeMatches) {
-          codeMatches.forEach(m => {
-            const comp = m.match(/component\s*=\s*{\s*([A-Z][A-Za-z0-9_]*)\s*}/);
-            if (comp && comp[1]) {
-              usedComponents.add(comp[1]);
-            }
-          });
-        }
-      });
-      // 3. For any used component not defined, create a stub
-      const missingStubs = Array.from(usedComponents).filter(c => !definedComponents.has(c)).map(stubComponent);
-      if (missingStubs.length > 0) {
-        console.log('[LivePreview] Auto-stubbing missing components:', missingStubs);
-      }
-      // 4. Ensure App is always defined
-      if (!definedComponents.has('App') && !usedComponents.has('App')) {
-        missingStubs.push(`const App = () => (React.createElement('div', { style: { border: '2px solid #2563eb', borderRadius: '12px', padding: '48px', margin: '32px', color: '#2563eb', background: '#e0e7ff', fontFamily: 'sans-serif', textAlign: 'center', minHeight: '200px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', boxShadow: '0 4px 16px rgba(37,99,235,0.08)' } }, [ React.createElement('h2', { key: 'title', style: { fontWeight: 700, fontSize: '1.5em', marginBottom: '12px' } }, 'App Not Generated'), React.createElement('span', { key: 'msg' }, 'The main App component was not generated. Please try regenerating your app or updating your prompt.') ])); window.App = App;`);
-        console.log('[LivePreview] Auto-stubbing missing App component.');
-      }
-
       // 5) Expose React, Router globals
       const runtimeHelpers = `
 // ─── React hook globals ───
@@ -293,8 +248,7 @@ const { BrowserRouter: Router, Switch, Routes, Route, Link, Navigate, useParams,
             .replace(/^\s*<\s*$/gm, ''); // Remove stray '<' on its own line
           // After the component definition, assign it to window
           return `// ── ${f.name} ──\ntry {\n${sanitized}\nwindow.${componentName} = ${componentName};\n} catch(e) {\n  console.error("Error in ${f.name}:", e);\n}`;
-        }),
-        ...missingStubs,
+        })
       ].join("\n\n");
       // Optionally log the JS bundle for debugging
       console.log('[LivePreview] Final JS bundle for iframe:', jsBundle);
@@ -333,14 +287,7 @@ console.error = function(...args) {
   }, '*');
   origErr(...args);
 };
-
-  // All globals are ready, run app code
-${jsBundle}
-
-${mountCode}
-})();
-
-         </script>`;
+</script>`;
 
       htmlContent = htmlContent.replace(/<body>/i, `<body>${errorCapture}`);
 
@@ -443,27 +390,8 @@ ${mountCode}
   }
 
   // Default: controls + iframe with mock device frames
-  // Check for stubbed files
-  const stubFiles = generatedFiles.filter(f => (f as any).isStub);
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Stub warning banner */}
-      {stubFiles.length > 0 && (
-        <div className="bg-yellow-100 border-b border-yellow-300 text-yellow-900 px-4 py-2 flex items-center space-x-3">
-          <AlertCircle className="h-5 w-5 text-yellow-600 mr-2" />
-          <span className="font-semibold">Some files could not be generated and are using stubs:</span>
-          <ul className="ml-2 text-sm">
-            {stubFiles.map((f, i) => (
-              <li key={i} className="mb-1">
-                <span className="font-mono bg-yellow-200 px-1 rounded">{f.name}</span>
-                {(f as any).errorMsg && (
-                  <span className="ml-2 text-yellow-800">{(f as any).errorMsg}</span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
       <ErrorBoundary>
         <div className="flex justify-between items-center p-2 border-b bg-gray-50 dark:bg-gray-800 dark:border-gray-700">
           <div className="flex space-x-2">
@@ -519,7 +447,7 @@ ${mountCode}
                 {/* Volume buttons */}
                 <div className="absolute left-[-8px] top-16 w-2 h-8 bg-gray-700 rounded-l-md"></div>
                 <div className="absolute left-[-8px] top-28 w-2 h-8 bg-gray-700 rounded-l-md"></div>
-                {/* Frame for the app itself */}
+                <div className="absolute left-[-8px] top-28 w-2 h-8 bg-gray-700 rounded-l-md"></div>
                 <iframe
                   ref={iframeRef}
                   title="Mobile App Preview"
