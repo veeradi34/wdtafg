@@ -1,4 +1,3 @@
-import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import {
   DropdownMenu,
@@ -7,7 +6,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Moon, Sun, User } from "lucide-react";
+import { Moon, Sun, User, Plus, Book, Code } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 
 export default function AppHeader() {
@@ -15,38 +14,38 @@ export default function AppHeader() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
-    <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-30">
-      <div className="flex items-center justify-between px-4 py-2">
+    <header className="bg-gray-900 border-b border-gray-800 py-3 px-4">
+      <div className="container mx-auto flex items-center justify-between">
         {/* Logo and name */}
         <div className="flex items-center space-x-3">
-          <div className="flex items-center justify-center w-8 h-8 rounded bg-primary text-primary-foreground font-bold">
+          <div className="flex items-center justify-center w-8 h-8 rounded bg-purple-600 text-white font-bold">
             Z
           </div>
-          <span className="text-xl font-bold tracking-tight">ZeroCode</span>
-          <span className="hidden md:inline-block text-xs px-2 py-1 rounded-full bg-accent/10 text-accent">
-            Beta
-          </span>
+          <span className="text-xl font-bold tracking-tight text-white">ZeroCode</span>
+          {/* Beta label removed */}
         </div>
 
         {/* Center actions */}
         <div className="hidden md:flex items-center space-x-4">
-          <Button variant="outline" size="sm">
-            New Project
-          </Button>
-          <Button variant="outline" size="sm">
-            Examples
-          </Button>
-          <Button variant="outline" size="sm">
-            Documentation
-          </Button>
+          <button className="flex items-center space-x-2 px-4 py-1.5 text-sm text-gray-300 hover:text-white transition-colors">
+            <Plus className="h-4 w-4" />
+            <span>New Project</span>
+          </button>
+          <button className="flex items-center space-x-2 px-4 py-1.5 text-sm text-gray-300 hover:text-white transition-colors">
+            <Code className="h-4 w-4" />
+            <span>Examples</span>
+          </button>
+          <button className="flex items-center space-x-2 px-4 py-1.5 text-sm text-gray-300 hover:text-white transition-colors">
+            <Book className="h-4 w-4" />
+            <span>Documentation</span>
+          </button>
         </div>
 
         {/* Right actions */}
         <div className="flex items-center space-x-3">
-          <Button
-            variant="ghost"
-            size="icon"
+          <button
             onClick={toggleTheme}
+            className="p-1.5 rounded-md text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
             aria-label="Toggle theme"
           >
             {isDarkMode ? (
@@ -54,45 +53,44 @@ export default function AppHeader() {
             ) : (
               <Moon className="h-5 w-5" />
             )}
-          </Button>
+          </button>
 
           <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
             <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                className="relative w-8 h-8 overflow-hidden rounded-full bg-gray-200 flex items-center justify-center hover:ring-2 hover:ring-primary transition-all"
+              <button
+                className="relative w-8 h-8 overflow-hidden rounded-full bg-gray-800 flex items-center justify-center hover:ring-2 hover:ring-blue-500 transition-all"
               >
-                <User className="h-5 w-5 text-gray-500" />
-              </Button>
+                <User className="h-5 w-5 text-gray-400" />
+              </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56" align="end">
-              <div className="px-4 py-3">
+            <DropdownMenuContent className="w-56 bg-gray-800 border-gray-700 text-gray-200" align="end">
+              <div className="px-4 py-3 border-b border-gray-700">
                 <p className="text-sm">user@example.com</p>
-                <p className="text-xs text-muted-foreground truncate">
+                <p className="text-xs text-gray-400 truncate">
                   Free Plan
                 </p>
               </div>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>Projects</DropdownMenuItem>
-              <DropdownMenuItem>Settings</DropdownMenuItem>
-              <DropdownMenuItem>Sign out</DropdownMenuItem>
+              <DropdownMenuSeparator className="bg-gray-700" />
+              <DropdownMenuItem className="hover:bg-gray-700 cursor-pointer">Projects</DropdownMenuItem>
+              <DropdownMenuItem className="hover:bg-gray-700 cursor-pointer">Settings</DropdownMenuItem>
+              <DropdownMenuItem className="hover:bg-gray-700 cursor-pointer">Sign out</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
       </div>
 
       {/* Mobile menu */}
-      <div className="md:hidden border-t border-gray-200 dark:border-gray-700">
+      <div className="md:hidden border-t border-gray-800 mt-2">
         <div className="flex justify-between px-4 py-2">
-          <Button variant="outline" size="sm">
+          <button className="text-sm text-gray-300 px-3 py-1.5 rounded hover:bg-gray-800">
             New Project
-          </Button>
-          <Button variant="outline" size="sm">
+          </button>
+          <button className="text-sm text-gray-300 px-3 py-1.5 rounded hover:bg-gray-800">
             Examples
-          </Button>
-          <Button variant="outline" size="sm">
+          </button>
+          <button className="text-sm text-gray-300 px-3 py-1.5 rounded hover:bg-gray-800">
             Docs
-          </Button>
+          </button>
         </div>
       </div>
     </header>

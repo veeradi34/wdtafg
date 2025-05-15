@@ -35,8 +35,9 @@ export function useAppGeneration(options?: UseAppGenerationOptions) {
     setError(null);
 
     try {
-      const response = await apiRequest("POST", "/api/generate", {
-        prompt,
+      const response = await apiRequest("POST", "/api/generate-files-openai", {
+        refinedPrompt: prompt,
+        design_notes: "Generated from user prompt",
         framework: settings.framework,
         styling: settings.styling,
         stateManagement: settings.stateManagement,

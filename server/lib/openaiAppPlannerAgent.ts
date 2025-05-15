@@ -2,10 +2,14 @@ import OpenAI from "openai";
 import { promises as fs } from "fs";
 import path from "path";
 import dotenv from "dotenv";
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 dotenv.config();
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const MODEL = "gpt-4o";
+const MODEL = "gpt-3.5-turbo-0125";
 
 export async function planAppFiles(refinedPrompt: string, framework = "React", styling = "Tailwind CSS", stateManagement = "React Hooks", buildTool = "Vite"): Promise<any> {
   // Use openaiCodegen.txt as the system prompt

@@ -7,6 +7,9 @@ import { insertProjectSchema } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
 import { planAppFiles } from "./lib/openaiAppPlannerAgent";
 import { generateFileCode } from "./lib/openaiFileCodegenAgent";
+import { fixAppErrors } from "./lib/openaiErrorFixAgent";
+import OpenAI from "openai";
+import { handleChatbotEdit } from "./lib/chatbotAgent";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // API routes prefix
@@ -220,7 +223,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
           framework: framework || "React",
           styling: styling || "Tailwind CSS"
         });
-        generated_files.push({ path: file.path, content });
+        // Infer name, type, and language
+        const name = file.path.split("/").pop() || file.path;
+        const ext = name.split(".").pop() || "";
+        let language = undefined;
+        switch (ext) {
+          case "js": language = "javascript"; break;
+          case "jsx": language = "jsx"; break;
+          case "ts": language = "typescript"; break;
+          case "tsx": language = "tsx"; break;
+          case "json": language = "json"; break;
+          case "css": language = "css"; break;
+          case "html": language = "html"; break;
+          case "md": language = "markdown"; break;
+          default: language = undefined;
+        }
+        generated_files.push({
+          name,
+          path: file.path,
+          type: "file",
+          content,
+          language
+        });
       }
       res.json({
         generated_files,
@@ -229,6 +253,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error: any) {
       console.error("Error generating files with OpenAI:", error);
+      res.status(500).json({ error: error.message || "Unknown error" });
+    }
+  });
+
+  // --- Chatbot Edit Agent Endpoint ---
+
+  // Utility: Compute cosine similarity between two vectors
+  function cosineSimilarity(a: number[], b: number[]): number {
+    const dot = a.reduce((sum, ai, i) => sum + ai * b[i], 0);
+    const normA = Math.sqrt(a.reduce((sum, ai) => sum + ai * ai, 0));
+    const normB = Math.sqrt(b.reduce((sum, bi) => sum + bi * bi, 0));
+    return dot / (normA * normB);
+  }
+
+  // Utility: Get embedding for a string
+  async function getEmbedding(text: string): Promise<number[]> {
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const res = await openai.embeddings.create({
+      model: "text-embedding-3-small",
+      input: text,
+    });
+    return res.data[0].embedding;
+  }
+
+  app.post("/api/chatbot-edit", async (req, res) => {
+    try {
+      const { message, codeFiles, conversationHistory } = req.body;
+      const result = await handleChatbotEdit({ message, codeFiles, conversationHistory });
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error in chatbot-edit:", error);
       res.status(500).json({ error: error.message || "Unknown error" });
     }
   });

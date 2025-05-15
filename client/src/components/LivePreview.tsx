@@ -252,7 +252,7 @@ ${mountCode}
         <Eye className="w-12 h-12 text-primary mb-4" />
         <h3 className="text-xl font-semibold mb-2">Preview Your App</h3>
         <p className="text-center text-gray-500 dark:text-gray-400">
-          Enter a description and click “Generate App” to see it here.
+          Enter a description and click "Generate App" to see it here.
         </p>
       </div>
     );
@@ -291,7 +291,7 @@ ${mountCode}
     );
   }
 
-  // Default: controls + iframe
+  // Default: controls + iframe with mock device frames
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <div className="flex justify-between items-center p-2 border-b bg-gray-50 dark:bg-gray-800 dark:border-gray-700">
@@ -339,21 +339,61 @@ ${mountCode}
       </div>
       <div className="flex-1 flex bg-gray-100 dark:bg-gray-900 p-4 overflow-hidden">
         <div className="flex-1 flex justify-center items-start overflow-auto">
-          <div
-            className={`bg-white dark:bg-gray-800 rounded-md shadow-md flex flex-col transition-all ${
-              previewSize === "desktop"
-                ? "w-full h-full"
-                : previewSize === "tablet"
-                ? "w-[768px] h-[1024px]"
-                : "w-[375px] h-[667px]"
-            }`}
-          >
-            <iframe
-              ref={iframeRef}
-              title="App Preview"
-              className="flex-1 w-full h-full"
-            />
-          </div>
+          {previewSize === "mobile" ? (
+            <div className="relative bg-black rounded-[36px] shadow-xl border-8 border-black h-[600px] w-[320px] overflow-hidden">
+              {/* Notch for mobile device */}
+              <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-16 h-5 bg-black z-10 rounded-b-lg"></div>
+              {/* Power button */}
+              <div className="absolute right-[-8px] top-20 w-2 h-12 bg-gray-700 rounded-r-md"></div>
+              {/* Volume buttons */}
+              <div className="absolute left-[-8px] top-16 w-2 h-8 bg-gray-700 rounded-l-md"></div>
+              <div className="absolute left-[-8px] top-28 w-2 h-8 bg-gray-700 rounded-l-md"></div>
+              {/* Frame for the app itself */}
+              <iframe
+                ref={iframeRef}
+                title="Mobile App Preview"
+                className="w-full h-full bg-white"
+              />
+            </div>
+          ) : previewSize === "tablet" ? (
+            <div className="relative bg-black rounded-[24px] shadow-xl border-[12px] border-black h-[800px] w-[600px] overflow-hidden">
+              {/* Camera for tablet */}
+              <div className="absolute top-2 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-gray-700 rounded-full z-10"></div>
+              {/* Power button */}
+              <div className="absolute right-[-12px] top-24 w-3 h-14 bg-gray-700 rounded-r-md"></div>
+              {/* Volume buttons */}
+              <div className="absolute top-[-12px] right-24 h-3 w-14 bg-gray-700 rounded-t-md"></div>
+              <iframe
+                ref={iframeRef}
+                title="Tablet App Preview"
+                className="w-full h-full bg-white"
+              />
+            </div>
+          ) : (
+            <div className="bg-white dark:bg-gray-800 rounded-md shadow-md flex flex-col w-full h-full overflow-hidden">
+              {/* Desktop browser chrome */}
+              <div className="bg-gray-200 dark:bg-gray-700 h-7 flex items-center px-2 border-b border-gray-300 dark:border-gray-600">
+                <div className="flex space-x-1.5">
+                  <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                  <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                  <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                </div>
+                <div className="mx-auto bg-white dark:bg-gray-800 rounded-sm px-3 py-0.5 text-xs text-gray-600 dark:text-gray-300 flex items-center">
+                  <div className="mr-1 w-3 h-3 flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+                      <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <span>preview.zerocode.app</span>
+                </div>
+              </div>
+              <iframe
+                ref={iframeRef}
+                title="Desktop App Preview"
+                className="flex-1 w-full"
+              />
+            </div>
+          )}
         </div>
         {isComplete && generatedApp && (
           <div className="w-72 ml-4 overflow-auto">

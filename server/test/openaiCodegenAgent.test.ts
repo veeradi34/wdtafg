@@ -1,5 +1,3 @@
-process.env.GOOGLE_API_KEY = 'AIzaSyDNo-6CNPVKHYYHNnts3tx7sOfiRNorm1w';
-process.env.OPENAI_API_KEY =
 import { describe, it, expect, beforeAll } from 'vitest';
 import * as openaiCodegenAgent from '../lib/openaiCodegenAgent';
 import type { GenerateAppOptions } from '../lib/openaiCodegenAgent';
@@ -9,7 +7,13 @@ import path from 'path';
 import dotenv from 'dotenv';
 dotenv.config();
 
-describe('generateApp (real OpenAI API, with Gemini refined prompt)', () => {
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
+
+// Skip the test if API keys are not set
+const maybeDescribe = (OPENAI_API_KEY && GOOGLE_API_KEY) ? describe : describe.skip;
+
+maybeDescribe('generateApp (real OpenAI API, with Gemini refined prompt)', () => {
   let systemPrompt: string;
   beforeAll(async () => {
     const promptPath = path.join(__dirname, '../prompts/openaiCodegen.txt');
