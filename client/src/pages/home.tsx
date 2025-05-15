@@ -24,6 +24,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { v4 as uuidv4 } from 'uuid';
+
 // Add onLogout prop to the Home component
 interface HomeProps {
   isDarkMode?: boolean;
@@ -131,6 +133,15 @@ export default function Home({ isDarkMode: propIsDarkMode, toggleTheme: propTogg
   const startXRef = useRef(0);
   const startWidthRef = useRef(0);
   const contentRef = useRef<HTMLDivElement>(null);
+
+  const [chatMessages, setChatMessages] = useState([
+    {
+      id: uuidv4(),
+      content: "What kind of app would you like me to build?",
+      sender: "system",
+      timestamp: new Date(),
+    },
+  ]);
 
   // Apply theme changes to body
   useEffect(() => {
@@ -381,6 +392,19 @@ export default function Home({ isDarkMode: propIsDarkMode, toggleTheme: propTogg
       
       setDependencies(mainDeps);
       setDevDependencies(devDeps);
+
+      // Add the system message from the backend after app generation
+      if (data.conversationMessage) {
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            id: uuidv4(),
+            content: data.conversationMessage,
+            sender: "system",
+            timestamp: new Date(),
+          },
+        ]);
+      }
     },
     onError: (error) => {
       toast({
@@ -392,15 +416,30 @@ export default function Home({ isDarkMode: propIsDarkMode, toggleTheme: propTogg
   });
 
   const handleGenerate = (promptText: string) => {
+    // Add user message to chat
+    setChatMessages((prev) => [
+      ...prev,
+      {
+        id: uuidv4(),
+        content: promptText,
+        sender: "user",
+        timestamp: new Date(),
+      },
+    ]);
     generateApp(promptText, projectSettings);
   };
 
-  // Clear chat only, not the files
   const handleClearChat = () => {
     setPrompt("");
-    // Only reset the chat, not the files - increment the chat key to force a complete re-render
-    setChatKey(prev => prev + 1);
-    
+    setChatMessages([
+      {
+        id: uuidv4(),
+        content: "What kind of app would you like me to build?",
+        sender: "system",
+        timestamp: new Date(),
+      },
+    ]);
+    setChatKey((prev) => prev + 1);
     toast({
       title: "Chat Cleared",
       description: "Chat history has been cleared.",
@@ -566,13 +605,15 @@ export default function Home({ isDarkMode: propIsDarkMode, toggleTheme: propTogg
           </div>
           
           <ChatInterface
-            key={`chat-${chatKey}`} // Use key to force complete re-render when chat should be reset
+            key={`chat-${chatKey}`}
             onGenerate={handleGenerate}
-            onClear={handleClearChat} // Use the clear chat function
+            onClear={handleClearChat}
             isGenerating={isGenerating}
             prompt={prompt}
             setPrompt={setPrompt}
             isDarkMode={isDarkMode}
+            messages={chatMessages}
+            setMessages={setChatMessages}
           />
         </div>
             

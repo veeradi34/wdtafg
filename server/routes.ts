@@ -10,6 +10,7 @@ import { generateFileCode } from "./lib/openaiFileCodegenAgent";
 import { fixAppErrors } from "./lib/openaiErrorFixAgent";
 import OpenAI from "openai";
 import { handleChatbotEdit } from "./lib/chatbotAgent";
+import { getAppIdeaFeedback, getUpdateFeedback } from "./lib/conversationalBotAgent";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // API routes prefix
@@ -212,6 +213,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       // Step 1: Get the app plan (files, dependencies, etc.)
       const appJson = await planAppFiles(refinedPrompt, framework, styling, stateManagement, buildTool);
+      
+      // Step 1.5: Get conversational bot feedback (appreciation + breakdown)
+      const conversationMessage = await getAppIdeaFeedback(refinedPrompt);
+      
       // Step 2: Generate code for each file
       const generated_files = [];
       for (const file of appJson.files) {
@@ -264,7 +269,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         generated_files,
         dependencies: appJson.dependencies || {},
-        devDependencies: appJson.devDependencies || {}
+        devDependencies: appJson.devDependencies || {},
+        conversationMessage // <-- include the bot's message in the response
       });
     } catch (error: any) {
       console.error("Error generating files with OpenAI:", error);
@@ -299,6 +305,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(result);
     } catch (error: any) {
       console.error("Error in chatbot-edit:", error);
+      res.status(500).json({ error: error.message || "Unknown error" });
+    }
+  });
+
+  // Initial app idea feedback
+  app.post("/api/conversation/initiate", async (req: Request, res: Response) => {
+    try {
+      const { refinedPrompt } = req.body;
+      if (!refinedPrompt) {
+        return res.status(400).json({ error: "refinedPrompt is required" });
+      }
+      const message = await getAppIdeaFeedback(refinedPrompt);
+      res.json({ message });
+    } catch (error: any) {
+      console.error("Error in conversation/initiate:", error);
+      res.status(500).json({ error: error.message || "Unknown error" });
+    }
+  });
+
+  // Update feedback
+  app.post("/api/conversation/update", async (req: Request, res: Response) => {
+    try {
+      const { updatePrompt, appStateSummary } = req.body;
+      if (!updatePrompt || !appStateSummary) {
+        return res.status(400).json({ error: "updatePrompt and appStateSummary are required" });
+      }
+      const message = await getUpdateFeedback(updatePrompt, appStateSummary);
+      res.json({ message });
+    } catch (error: any) {
+      console.error("Error in conversation/update:", error);
       res.status(500).json({ error: error.message || "Unknown error" });
     }
   });

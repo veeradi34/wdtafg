@@ -8,6 +8,8 @@ interface ChatInterfaceProps {
   setPrompt: (prompt: string) => void;
   isDarkMode: boolean;
   resetChat?: boolean; // Added to trigger chat reset
+  messages: Message[];
+  setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
 }
 
 interface Message {
@@ -34,11 +36,10 @@ export default function ChatInterface({
   prompt,
   setPrompt,
   isDarkMode,
-  resetChat
+  resetChat,
+  messages,
+  setMessages
 }: ChatInterfaceProps) {
-  const [messages, setMessages] = useState<Message[]>([
-    DEFAULT_WELCOME_MESSAGE
-  ]);
   const [inputValue, setInputValue] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const promptProcessedRef = useRef(false);
@@ -70,7 +71,7 @@ export default function ChatInterface({
       setMessages([DEFAULT_WELCOME_MESSAGE]);
       promptProcessedRef.current = false;
     }
-  }, [resetChat]);
+  }, [resetChat, setMessages]);
   
   // Add existing prompt as user message if it exists on component mount
   // Only run once by using a ref to track if the prompt has been processed
@@ -87,7 +88,7 @@ export default function ChatInterface({
         }
       ]);
     }
-  }, [prompt, messages.length]);
+  }, [prompt, messages.length, setMessages]);
   
   // Scroll to bottom when messages change
   useEffect(() => {
