@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 
 const AuthScreenWrapper: React.FC = () => {
-  const { login } = useAuth();
+  const { login, refreshUser } = useAuth();
   const [_, navigate] = useLocation();
   const { toast } = useToast();
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -32,8 +32,8 @@ const AuthScreenWrapper: React.FC = () => {
   };
 
   // Handle successful login
-  const handleLoginSuccess = () => {
-    login();
+  const handleLoginSuccess = async () => {
+    await refreshUser();
     navigate('/app');
   };
 

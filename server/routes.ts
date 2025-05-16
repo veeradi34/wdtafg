@@ -522,10 +522,110 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
         return res.status(200).json(existingGeneration.generatedApp);
       }
-      // No cached result, call your existing generation function
-      res.status(501).json({ message: "MongoDB caching set up, but need to implement your generation function" });
-      // After generation, store the result in MongoDB:
-      /*
+      // No cached result, call the OpenAI-based generation logic
+      const { framework, styling, stateManagement, buildTool, design_notes } = settings || {};
+      // Step 1: Get the app plan (files, dependencies, etc.)
+      const appJson = await planAppFiles(prompt, framework, styling, stateManagement, buildTool);
+      // Step 1.5: Get conversational bot feedback (appreciation + breakdown)
+      const conversationMessage = await getAppIdeaFeedback(prompt);
+      // Step 2: Generate code for each file
+      let generated_files = [];
+      for (const file of appJson.files) {
+        let errorContext = '';
+        let result: { code: string; isStub: boolean; errorMsg: string } = { code: '', isStub: true, errorMsg: '' };
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const genResult = await generateFileCode({
+            refinedPrompt: prompt,
+            design_notes,
+            filePath: file.path,
+            fileInfo: file.info || {},
+            framework: framework || "React",
+            styling: styling || "Tailwind CSS",
+            errorContext,
+            maxRetries: 0
+          });
+          result = {
+            code: genResult.code,
+            isStub: genResult.isStub,
+            errorMsg: genResult.errorMsg || ''
+          };
+          if (!result.isStub) break;
+          errorContext = result.errorMsg || errorContext;
+        }
+        // Infer name, type, and language
+        const name = file.path.split("/").pop() || file.path;
+        const ext = name.split(".").pop() || "";
+        let language = undefined;
+        switch (ext) {
+          case "js": language = "javascript"; break;
+          case "jsx": language = "jsx"; break;
+          case "ts": language = "typescript"; break;
+          case "tsx": language = "tsx"; break;
+          case "json": language = "json"; break;
+          case "css": language = "css"; break;
+          case "html": language = "html"; break;
+          case "md": language = "markdown"; break;
+          default: language = undefined;
+        }
+        generated_files.push({
+          name,
+          path: file.path,
+          type: "file",
+          content: result.code,
+          language,
+          isStub: result.isStub,
+          errorMsg: result.errorMsg || ''
+        });
+      }
+      // Backend validation: Ensure all referenced components are generated
+      const mainFile = generated_files.find(f => f.name === 'App.jsx' || f.name === 'App.tsx' || f.name === 'App.js' || f.name === 'App.ts');
+      if (mainFile && typeof mainFile.content === 'string') {
+        const referenced = extractComponentNames(mainFile.content);
+        const generated = getAllComponentNames(generated_files);
+        const missing = referenced.filter(name => !generated.includes(name) && name !== 'App');
+        for (const missingComponent of missing) {
+          // Generate missing component file
+          const filePath = `/src/${missingComponent}.jsx`;
+          const fileInfo = { description: `Component ${missingComponent} used in App but not generated.` };
+          let errorContext = '';
+          let result: { code: string; isStub: boolean; errorMsg: string } = { code: '', isStub: true, errorMsg: '' };
+          for (let attempt = 0; attempt < 3; attempt++) {
+            const genResult = await generateFileCode({
+              refinedPrompt: prompt,
+              design_notes,
+              filePath,
+              fileInfo,
+              framework: framework || "React",
+              styling: styling || "Tailwind CSS",
+              errorContext,
+              maxRetries: 0
+            });
+            result = {
+              code: genResult.code,
+              isStub: genResult.isStub,
+              errorMsg: genResult.errorMsg || ''
+            };
+            if (!result.isStub) break;
+            errorContext = result.errorMsg || errorContext;
+          }
+          generated_files.push({
+            name: `${missingComponent}.jsx`,
+            path: filePath,
+            type: "file",
+            content: result.code,
+            language: "jsx",
+            isStub: result.isStub,
+            errorMsg: result.errorMsg || ''
+          });
+        }
+      }
+      const generatedApp = {
+        generated_files,
+        dependencies: appJson.dependencies || {},
+        devDependencies: appJson.devDependencies || {},
+        conversationMessage
+      };
+      // Store the result in MongoDB
       await generationsCollection.insertOne({
         prompt,
         settings,
@@ -534,7 +634,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         lastAccessed: new Date(),
         generatedApp
       });
-      */
+      return res.status(200).json(generatedApp);
     } catch (error: any) {
       console.error('Error generating app with MongoDB caching:', error);
       res.status(500).json({ message: 'Failed to generate app', error: error.message });

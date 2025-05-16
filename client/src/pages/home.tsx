@@ -416,16 +416,6 @@ export default function Home({ isDarkMode: propIsDarkMode, toggleTheme: propTogg
   });
 
   const handleGenerate = (promptText: string) => {
-    // Add user message to chat
-    setChatMessages((prev) => [
-      ...prev,
-      {
-        id: uuidv4(),
-        content: promptText,
-        sender: "user",
-        timestamp: new Date(),
-      } as Message,
-    ]);
     generateApp(promptText, projectSettings);
   };
 

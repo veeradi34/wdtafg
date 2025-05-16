@@ -3,6 +3,7 @@ import cors from "cors";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import fetch from 'node-fetch';
+import { setupAuth } from './lib/auth';
 globalThis.fetch = fetch as any;
 const app = express();
 
@@ -14,6 +15,8 @@ app.use(cors({
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+setupAuth(app);
 
 app.use((req, res, next) => {
   const start = Date.now();

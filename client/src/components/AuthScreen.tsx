@@ -117,18 +117,7 @@ export default function AuthScreen({ onLogin, isDarkMode, toggleTheme }: AuthScr
   
   // Handle Google Sign-in
   const handleGoogleSignIn = () => {
-    setIsLoading(true);
-    
-    // Simulate API call for Google Sign-in
-    setTimeout(() => {
-      toast({
-        title: "Google Sign-in successful",
-        description: "Welcome back!",
-      });
-      
-      setIsLoading(false);
-      onLogin();
-    }, 1500);
+    window.location.href = "http://localhost:5001/api/auth/google";
   };
   
   // Go back to landing page
