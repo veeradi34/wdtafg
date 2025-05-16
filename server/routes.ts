@@ -234,14 +234,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let generated_files = [];
       for (const file of appJson.files) {
         let errorContext = '';
-        let result = {
-          code: '',
-          isStub: true,
-          errorMsg: 'Codegen did not run.'
-        };
+        let result: { code: string; isStub: boolean; errorMsg: string } = { code: '', isStub: true, errorMsg: '' };
         // Try up to 3 times to generate a valid file
         for (let attempt = 0; attempt < 3; attempt++) {
-          result = await generateFileCode({
+          const genResult = await generateFileCode({
             refinedPrompt,
             design_notes,
             filePath: file.path,
@@ -251,6 +247,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             errorContext,
             maxRetries: 0 // We handle retries here, so set to 0 in the agent
           });
+          result = {
+            code: genResult.code,
+            isStub: genResult.isStub,
+            errorMsg: genResult.errorMsg || ''
+          };
           if (!result.isStub) break;
           errorContext = result.errorMsg || errorContext;
         }

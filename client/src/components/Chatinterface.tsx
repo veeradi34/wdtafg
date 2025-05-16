@@ -12,7 +12,7 @@ interface ChatInterfaceProps {
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
 }
 
-interface Message {
+export interface Message {
   id: string;
   content: string;
   sender: "user" | "system" | "thinking";

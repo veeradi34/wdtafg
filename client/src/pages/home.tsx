@@ -9,7 +9,7 @@ import {
   Dependency 
 } from "@/lib/types";
 import { GeneratedApp } from "@shared/schema";
-import ChatInterface from "@/components/Chatinterface";
+import ChatInterface, { Message } from "@/components/Chatinterface";
 import ProjectFiles from "@/components/ProjectFiles";
 import CodeEditor from "@/components/CodeEditor";
 import LivePreview from "@/components/LivePreview";
@@ -134,7 +134,7 @@ export default function Home({ isDarkMode: propIsDarkMode, toggleTheme: propTogg
   const startWidthRef = useRef(0);
   const contentRef = useRef<HTMLDivElement>(null);
 
-  const [chatMessages, setChatMessages] = useState([
+  const [chatMessages, setChatMessages] = useState<Message[]>([
     {
       id: uuidv4(),
       content: "What kind of app would you like me to build?",
@@ -394,15 +394,15 @@ export default function Home({ isDarkMode: propIsDarkMode, toggleTheme: propTogg
       setDevDependencies(devDeps);
 
       // Add the system message from the backend after app generation
-      if (data.conversationMessage) {
+      if ((data as any)?.conversationMessage) {
         setChatMessages((prev) => [
           ...prev,
           {
             id: uuidv4(),
-            content: data.conversationMessage,
+            content: (data as any).conversationMessage,
             sender: "system",
             timestamp: new Date(),
-          },
+          } as Message,
         ]);
       }
     },
@@ -424,7 +424,7 @@ export default function Home({ isDarkMode: propIsDarkMode, toggleTheme: propTogg
         content: promptText,
         sender: "user",
         timestamp: new Date(),
-      },
+      } as Message,
     ]);
     generateApp(promptText, projectSettings);
   };
@@ -437,7 +437,7 @@ export default function Home({ isDarkMode: propIsDarkMode, toggleTheme: propTogg
         content: "What kind of app would you like me to build?",
         sender: "system",
         timestamp: new Date(),
-      },
+      } as Message,
     ]);
     setChatKey((prev) => prev + 1);
     toast({

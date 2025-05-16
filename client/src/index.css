@@ -1,7 +1,78 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+/* Additional CSS for extreme edge-to-edge layout */
+/* add these to your global CSS or tailwind.config.js */
 
+/* Clear all default margins and paddings */
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  width: 100%;
+}
+
+/* Make root container stretch fully */
+#root, #__next {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  margin: 0;
+  padding: 0;
+}
+
+/* Ensure all direct children of the body are edge-to-edge */
+body > div {
+  width: 100%;
+  max-width: 100vw;
+  margin: 0;
+  padding: 0;
+}
+
+/* Override default tailwind container */
+.container {
+  max-width: none;
+  width: 100%;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+/* The super rounded buttons and cards */
+.super-rounded {
+  border-radius: 1rem;
+}
+
+/* Make hero section background color consistent */
+.hero-bg {
+  background-color: #e5e7eb;
+}
+
+/* Make app builder section darker gray */
+.app-builder-bg {
+  background-color: #d1d5db;
+}
+
+/* Zero margin containers */
+.zero-margin-container {
+  width: 100%;
+  margin: 0;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+/* Fix Firefox overflow behavior */
+@-moz-document url-prefix() {
+  html, body {
+    scrollbar-width: none;
+  }
+}
+
+/* Handle Safari edge cases */
+@supports (-webkit-appearance:none) {
+  body {
+    -webkit-text-size-adjust: 100%;
+  }
+}
 :root {
       --background: 0 0% 100%;
 --foreground: 20 14.3% 4.1%;

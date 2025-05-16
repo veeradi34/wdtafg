@@ -44,7 +44,10 @@ if (!uri) {
 console.log(`MongoDB: Connecting to ${uri.split('@')[1] || 'database'}...`);
 
 // MongoDB connection options
-const options: MongoClientOptions = {};
+// Use only tls: true for Atlas compatibility. If you still get SSL errors, check Atlas TLS settings, your IP whitelist, and system CA certificates.
+const options: MongoClientOptions = process.env.NODE_ENV === 'development' ? {
+  tls: true
+} : {};
 
 // Global cache for the MongoDB client
 let client: MongoClient;
